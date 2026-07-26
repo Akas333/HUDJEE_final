@@ -1,37 +1,47 @@
 export const colors = {
-  // Brand purple — electric violet for values & accents
-  primary: '#9B6FFF',
-  primaryGradientStart: '#9B6FFF',
-  primaryGradientEnd: '#5B8DEF',
+  // Brand Max Gradient (Neon Green to Cyan)
+  primary: '#38BDF8', // Cyan/Sky
+  primaryGradientStart: '#4ADE80', // Neon Green
+  primaryGradientEnd: '#38BDF8',   // Neon Cyan
+  primaryDark: '#0284C7',          // For 3D button bottom border
 
-  // Accent amber — "Time Spent", "Your Rank", active tab border
+  // Accent
   accent: '#E8B84B',
+  accentDark: '#B45309',
 
   // ── Exact background tokens from design ──
-  background: '#0E0E10',       // page bg — near black
-  surface: '#161618',          // card bg — slightly lifted dark
-  surfaceLight: '#1E1E21',     // hover / pressed state
-  surfaceElevated: '#252528',  // top-layer elements
+  background: '#000000',       // pure black page bg
+  surface: '#111827',          // card bg — slightly lifted dark
+  surfaceLight: '#1F2937',     // hover / pressed state
+  surfaceElevated: '#374151',  // top-layer elements
 
   // Text
-  text: '#F2F2F4',             // soft white
-  textSecondary: '#6E6E7A',    // muted grey labels
+  text: '#FFFFFF',             // pure white
+  textSecondary: '#9CA3AF',    // muted grey labels
 
-  // Border — barely-visible separator
-  border: '#252528',
+  // Border
+  border: '#374151',
 
-  // Tag colours (from the hero banner badges)
-  tagPurple: '#6C5CE7',
-  tagPurpleBg: 'rgba(108, 92, 231, 0.15)',
-  tagRed: '#E84545',
-  tagRedBg: 'rgba(232, 69, 69, 0.15)',
-  tagGreen: '#00B894',
-  tagGreenBg: 'rgba(0, 184, 148, 0.15)',
+  // Tag colours
+  tagPurple: '#A855F7',
+  tagPurpleBg: 'rgba(168, 85, 247, 0.15)',
+  tagRed: '#EF4444',
+  tagRedBg: 'rgba(239, 68, 68, 0.15)',
+  tagGreen: '#22C55E',
+  tagGreenBg: 'rgba(34, 197, 94, 0.15)',
 
   // Utility
-  error: '#F05050',
-  success: '#2DD4A0',
+  error: '#FF4B4B',
+  errorDark: '#DC2626',
+  success: '#4ADE80',
+  successDark: '#16A34A',
+  warning: '#FBBF24',
   transparent: 'transparent',
+  
+  // Aliases used in some components
+  primaryLight: '#7DD3FC',
+  card: '#111827',
+  cardElevated: '#1F2937',
 };
 
 

@@ -10,8 +10,7 @@ interface StatCardProps {
   bgImage?: any;
 }
 
-export default function StatCard({ title, value, unit, valueColor = colors.primaryLight, bgImage }: StatCardProps) {
-  // Split title into two lines if it contains a space for better formatting based on design
+export default function StatCard({ title, value, unit, valueColor = colors.primary, bgImage }: StatCardProps) {
   const titleParts = title.split(' ');
 
   return (
@@ -34,15 +33,19 @@ export default function StatCard({ title, value, unit, valueColor = colors.prima
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderBottomWidth: 6,
+    borderBottomColor: colors.border,
+    padding: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     flex: 1,
-    marginHorizontal: 6,
-    marginBottom: 12,
+    marginHorizontal: 8,
+    marginBottom: 16,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -52,32 +55,32 @@ const styles = StyleSheet.create({
     bottom: -15,
     width: 80,
     height: 80,
-    opacity: 0.15, // faint watermark
+    opacity: 0.1, 
   },
   titleContainer: {
     flex: 1,
   },
   title: {
-    color: colors.text,
+    color: colors.textSecondary,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     lineHeight: 20,
+    textTransform: 'uppercase',
   },
   valueContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
   value: {
-    fontSize: 48,
-    fontWeight: '800',
-    fontStyle: 'italic',
+    fontSize: 42,
+    fontWeight: '900',
     lineHeight: 48,
     includeFontPadding: false,
   },
   unit: {
-    color: colors.warning, // typically the hrs unit is yellow in design
+    color: colors.textSecondary,
     fontSize: 14,
-    fontWeight: 'bold',
-    marginLeft: 2,
+    fontWeight: '800',
+    marginLeft: 4,
   }
 });

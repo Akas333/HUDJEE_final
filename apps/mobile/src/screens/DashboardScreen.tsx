@@ -6,189 +6,136 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Animated,
+  Animated as RNAnimated,
   Dimensions,
-  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bell, Target, ClipboardList, Trophy, Flame, BookOpen, BarChart3 } from 'lucide-react-native';
-import { colors } from '../theme/colors';
+import { Bell, Footprints, Target, ClipboardList } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 44) / 2; // 16 padding each side + 12 gap between cards
+const CONTAINER_WIDTH = width - 40;
 
-// ─── Animated Metric Card ───────────────────────────────────────────────────
-function MetricCard({
-  title,
-  value,
-  unit,
-  icon,
-  delay = 0,
-  accent = colors.primaryGradientStart,
-  showProgress = false,
-  progressValue = 0,
-}: any) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+// ─── SVG Icons ─────────────────────────────────────────────────────────────
+const FourPointStar = ({ size = 80, color = '#000000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+    <Path
+      d="M50 0C50 0 55 45 100 50C100 50 55 55 50 100C50 100 45 55 0 50C0 50 45 45 50 0Z"
+      fill={color}
+    />
+  </Svg>
+);
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        delay,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        delay,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+const ZapSvg = ({ size = 80, color = '#000000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+  </Svg>
+);
 
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.95,
-      useNativeDriver: true,
-      friction: 8,
-    }).start();
-  };
+const TargetSvg = ({ size = 80, color = '#000000' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
+    <Path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+    <Path d="M12 12h.01" />
+  </Svg>
+);
 
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 8,
-    }).start();
-  };
+const CARDS_DATA = [
+  { id: '1', title: 'Consistency', colors: ['#F3F4F6', '#9CA3AF'], icon: <FourPointStar size={110} color="#111827" /> },
+  { id: '2', title: 'Speed', colors: ['#86EFAC', '#4ADE80'], icon: <ZapSvg size={90} color="#064E3B" /> },
+  { id: '3', title: 'Accuracy', colors: ['#E78693', '#F43F5E'], icon: <TargetSvg size={90} color="#4C0519" /> },
+];
 
-  return (
-    <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-        width: CARD_WIDTH,
-        marginBottom: 16,
-      }}
-    >
-      <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut}>
-        <View style={styles.metricCard}>
-          {/* Background icon watermark */}
-          {icon && (
-            <View style={styles.metricIconBg}>
-              {icon}
-            </View>
-          )}
+const TOTAL_CARDS = CARDS_DATA.length;
+const SWIPE_THRESHOLD = width * 0.25;
 
-          <Text style={styles.metricTitle}>{title}</Text>
+// ─── Swipeable Card Component ────────────────────────────────────────────────
+const SwipeableCard = ({ card, index, activeIndex, dragX, dragY }) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    const relativeIndex = (index - activeIndex.value) % TOTAL_CARDS;
+    const wrappedIndex = (relativeIndex + TOTAL_CARDS) % TOTAL_CARDS;
+    const isFront = wrappedIndex === 0;
 
-          {value ? (
-            <View style={styles.metricValueRow}>
-              <Text style={[styles.metricValue, { color: accent }]}>{value}</Text>
-              {unit && <Text style={[styles.metricUnit, { color: accent }]}>{unit}</Text>}
-            </View>
-          ) : null}
+    const targetLeft = wrappedIndex === 0 ? 0 : wrappedIndex === 1 ? CONTAINER_WIDTH * 0.20 : CONTAINER_WIDTH * 0.35;
+    const targetTop = wrappedIndex === 0 ? 0 : wrappedIndex === 1 ? 7.5 : 15;
+    const targetWidth = wrappedIndex === 0 ? CONTAINER_WIDTH * 0.68 : CONTAINER_WIDTH * 0.65;
+    const targetHeight = wrappedIndex === 0 ? 220 : wrappedIndex === 1 ? 205 : 190;
+    const targetZIndex = 3 - wrappedIndex;
 
-          {showProgress && (
-            <View style={styles.metricProgressContainer}>
-              <Text style={styles.metricProgressLabel}>{progressValue}/100</Text>
-              <View style={styles.metricTrack}>
-                <LinearGradient
-                  colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.metricFill, { width: `${progressValue}%` }]}
-                />
-              </View>
-            </View>
-          )}
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-}
+    const currentDragX = isFront ? dragX.value : 0;
+    const currentDragY = isFront ? dragY.value : 0;
+    const rotate = isFront ? interpolate(dragX.value, [-width, 0, width], [-10, 0, 10], Extrapolation.CLAMP) : 0;
 
-// ─── Continue Learning Card ──────────────────────────────────────────────────
-function LearningCard({ title, progress, onPress }: any) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        delay: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        delay: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
+    return {
+      position: 'absolute',
+      zIndex: targetZIndex,
+      left: withSpring(targetLeft, { damping: 16, stiffness: 120 }),
+      top: withSpring(targetTop, { damping: 16, stiffness: 120 }),
+      width: withSpring(targetWidth, { damping: 16, stiffness: 120 }),
+      height: withSpring(targetHeight, { damping: 16, stiffness: 120 }),
+      transform: [
+        { translateX: currentDragX },
+        { translateY: currentDragY },
+        { rotate: `${rotate}deg` }
+      ]
+    };
+  });
 
   return (
-    <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [{ translateY: slideAnim }, { scale: scaleAnim }],
-        marginBottom: 12,
-      }}
-    >
-      <Pressable
-        onPressIn={() =>
-          Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, friction: 8 }).start()
-        }
-        onPressOut={() =>
-          Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 8 }).start()
-        }
-        onPress={onPress}
+    <Animated.View style={[styles.cardWrapper, animatedStyle]}>
+      <LinearGradient
+        colors={card.colors}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.cardSurface}
       >
-        <View style={styles.learningCard}>
-          <Text style={styles.learningTitle}>{title}</Text>
-          <View style={styles.learningProgressRow}>
-            <Text style={styles.learningProgressLabel}>{progress}%</Text>
-          </View>
-          <View style={styles.learningTrack}>
-            <LinearGradient
-              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[styles.learningFill, { width: `${progress}%` }]}
-            />
-          </View>
+        <Text style={styles.silverCardTitle}>{card.title}</Text>
+        <View style={styles.starWrapper}>
+          {card.icon}
         </View>
-      </Pressable>
+      </LinearGradient>
     </Animated.View>
   );
-}
+};
 
 // ─── Main Dashboard ──────────────────────────────────────────────────────────
 export default function DashboardScreen({ navigation }: any) {
-  const headerFade = useRef(new Animated.Value(0)).current;
-  const headerSlide = useRef(new Animated.Value(-10)).current;
-  const perfFade = useRef(new Animated.Value(0)).current;
-  const perfSlide = useRef(new Animated.Value(20)).current;
+  const fadeAnim = useRef(new RNAnimated.Value(0)).current;
+  const activeIndex = useSharedValue(0);
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(headerFade, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(headerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
-    ]).start();
-
-    Animated.parallel([
-      Animated.timing(perfFade, { toValue: 1, duration: 500, delay: 200, useNativeDriver: true }),
-      Animated.timing(perfSlide, { toValue: 0, duration: 500, delay: 200, useNativeDriver: true }),
-    ]).start();
+    RNAnimated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
   }, []);
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      dragX.value = event.translationX;
+      dragY.value = event.translationY;
+    })
+    .onEnd((event) => {
+      if (Math.abs(event.translationX) > SWIPE_THRESHOLD) {
+        dragX.value = withTiming(Math.sign(event.translationX) * width, { duration: 200 }, () => {
+          activeIndex.value = activeIndex.value + 1;
+          dragX.value = 0;
+          dragY.value = 0;
+        });
+      } else {
+        dragX.value = withSpring(0, { damping: 16 });
+        dragY.value = withSpring(0, { damping: 16 });
+      }
+    });
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -197,314 +144,117 @@ export default function DashboardScreen({ navigation }: any) {
         contentContainerStyle={styles.contentPadding}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Header ── */}
-        <Animated.View
-          style={[
-            styles.header,
-            { opacity: headerFade, transform: [{ translateY: headerSlide }] },
-          ]}
-        >
-          <Image
-            source={require('../../assets/logo.png')}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-            <Bell color={colors.textSecondary} size={22} />
+        <RNAnimated.View style={[styles.header, { opacity: fadeAnim }]}>
+          <Image source={require('../../assets/logo.png')} style={styles.logoImage} resizeMode="contain" />
+          <TouchableOpacity style={styles.iconButton}>
+            <Bell color="#9CA3AF" size={22} strokeWidth={2} />
           </TouchableOpacity>
-        </Animated.View>
+        </RNAnimated.View>
 
-        {/* ── Performance Score ── */}
-        <Animated.View
-          style={{ opacity: perfFade, transform: [{ translateY: perfSlide }] }}
-        >
-          <View style={styles.performanceCard}>
-            <View style={styles.performanceHeader}>
-              <View>
-                <Text style={styles.hudjeeLabel}>HudJee</Text>
-                <Text style={styles.performanceTitle}>Performance Score</Text>
-              </View>
-              <Text style={styles.performanceValue}>17/100</Text>
+        <RNAnimated.View style={[styles.scoreCard, { opacity: fadeAnim }]}>
+          <View style={styles.scoreHeader}>
+            <View>
+              <Text style={styles.scoreHudjeeText}>HudJee</Text>
+              <Text style={styles.scoreTitle}>Performance Score</Text>
             </View>
-            {/* Gradient Progress Bar */}
-            <View style={styles.perfTrack}>
-              <LinearGradient
-                colors={[colors.primaryGradientStart, '#C084FC', colors.accent]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.perfFill, { width: '17%' }]}
-              />
+            <View style={styles.footprintsWrapper}>
+              <Footprints color="#333333" size={54} strokeWidth={1} style={{ transform: [{ rotate: '-10deg' }] }} />
             </View>
           </View>
-        </Animated.View>
+          <View style={styles.scoreBottom}>
+            <Text style={styles.scoreValueText}>17/100</Text>
+            <View style={styles.scoreTrack}>
+              <LinearGradient colors={['#A7F3D0', '#38BDF8']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.scoreFill, { width: '30%' }]} />
+            </View>
+          </View>
+        </RNAnimated.View>
 
-        {/* ── Metrics Grid ── */}
-        <View style={styles.metricsGrid}>
-          <MetricCard
-            title="Active Streak"
-            value="7"
-            icon={<Flame size={52} color="#7C3AED" strokeWidth={1} />}
-            delay={150}
-          />
-          <MetricCard
-            title="Time Spent"
-            value="4"
-            unit="hrs"
-            icon={<BookOpen size={52} color={colors.accent} strokeWidth={1} />}
-            accent={colors.accent}
-            delay={200}
-          />
-          <MetricCard
-            title="Success Index"
-            icon={<Target size={52} color="#7C3AED" strokeWidth={1} />}
-            delay={250}
-            showProgress
-            progressValue={17}
-          />
-          <MetricCard
-            title="Syllabus Completion"
-            icon={<ClipboardList size={52} color="#7C3AED" strokeWidth={1} />}
-            delay={300}
-            showProgress
-            progressValue={17}
-          />
-          <MetricCard
-            title="Today's Goal"
-            value="7"
-            icon={<BarChart3 size={52} color="#7C3AED" strokeWidth={1} />}
-            delay={350}
-          />
-          <MetricCard
-            title="Your Rank"
-            value="7"
-            icon={<Trophy size={52} color={colors.accent} strokeWidth={1} />}
-            accent={colors.accent}
-            delay={400}
-          />
-        </View>
+        <RNAnimated.View style={[styles.section, { opacity: fadeAnim }]}>
+          <Text style={styles.sectionTitle}>Top Areas you can improve</Text>
+          <GestureDetector gesture={panGesture}>
+            <View style={styles.stackedContainer}>
+              {CARDS_DATA.map((card, index) => (
+                <SwipeableCard key={card.id} card={card} index={index} activeIndex={activeIndex} dragX={dragX} dragY={dragY} />
+              ))}
+            </View>
+          </GestureDetector>
+        </RNAnimated.View>
 
-        {/* ── Continue Learning ── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Continue Learning</Text>
-          <TouchableOpacity activeOpacity={0.7}>
-            <Text style={styles.viewAll}>View All</Text>
+        <RNAnimated.View style={[styles.gridContainer, { opacity: fadeAnim }]}>
+          <View style={styles.gridCard}>
+            <View style={styles.gridCardBgIcon}><Target color="#374151" size={110} strokeWidth={1.5} opacity={0.3} /></View>
+            <Text style={styles.gridCardTitle}>Success{'\n'}Index</Text>
+            <View style={styles.gridCardBottom}>
+              <Text style={styles.gridCardValue}>17/100</Text>
+              <View style={styles.gridCardTrack}><View style={[styles.gridCardFill, { width: '30%' }]} /></View>
+            </View>
+          </View>
+          <View style={styles.gridCard}>
+            <View style={styles.gridCardBgIcon}><ClipboardList color="#374151" size={100} strokeWidth={1.5} opacity={0.3} /></View>
+            <Text style={styles.gridCardTitle}>Syllabus{'\n'}Completion</Text>
+            <View style={styles.gridCardBottom}>
+              <Text style={styles.gridCardValue}>17/100</Text>
+              <View style={styles.gridCardTrack}><View style={[styles.gridCardFill, { width: '30%' }]} /></View>
+            </View>
+          </View>
+        </RNAnimated.View>
+
+        <RNAnimated.View style={[styles.section, { opacity: fadeAnim }]}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Continue Learning</Text>
+            <TouchableOpacity><Text style={styles.viewAllText}>View All</Text></TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.continueCard} activeOpacity={0.8} onPress={() => navigation.navigate('Practice')}>
+            <Text style={styles.continueTitle}>NLM</Text>
+            <View style={styles.continueBottom}>
+              <Text style={styles.continueValue}>17%</Text>
+              <View style={styles.continueTrack}><View style={[styles.continueFill, { width: '17%' }]} /></View>
+            </View>
           </TouchableOpacity>
-        </View>
-
-        <LearningCard
-          title="NLM"
-          progress={17}
-          onPress={() => navigation.navigate('Learn')}
-        />
-
-        <View style={{ height: 32 }} />
+        </RNAnimated.View>
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-  },
-  contentPadding: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
-  },
+  safeArea: { flex: 1, backgroundColor: '#09090B' },
+  container: { flex: 1 },
+  contentPadding: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 24 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  logoImage: { width: 140, height: 32, tintColor: '#FFFFFF' },
+  iconButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
+  scoreCard: { backgroundColor: '#111111', borderRadius: 16, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, marginBottom: 32, position: 'relative', overflow: 'hidden' },
+  scoreHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 },
+  scoreHudjeeText: { color: '#9CA3AF', fontSize: 11, fontWeight: '600', marginBottom: 2 },
+  scoreTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
+  footprintsWrapper: { position: 'absolute', right: -10, top: -5, opacity: 0.8 },
+  scoreBottom: { marginTop: 'auto' },
+  scoreValueText: { color: '#9CA3AF', fontSize: 10, fontWeight: '700', alignSelf: 'flex-end', marginBottom: 6 },
+  scoreTrack: { width: '100%', height: 6, backgroundColor: '#333333', borderRadius: 3, overflow: 'hidden' },
+  scoreFill: { height: '100%', borderRadius: 3 },
+  section: { marginBottom: 28 },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sectionTitle: { color: '#F3F4F6', fontSize: 17, fontWeight: '500', marginBottom: 16 },
+  viewAllText: { color: '#60A5FA', fontSize: 13, fontWeight: '600' },
+  
+  silverCardTitle: { color: '#111827', fontSize: 17, fontWeight: '800' },
+  starWrapper: { position: 'absolute', left: '50%', top: '50%', transform: [{ translateX: -55 }, { translateY: -40 }] },
 
-  // Header
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  logoImage: {
-    width: 140,
-    height: 40,
-    tintColor: '#FFFFFF',
-  },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  gridContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 28, gap: 16 },
+  gridCard: { flex: 1, backgroundColor: '#111111', borderRadius: 20, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 16, height: 150, position: 'relative', overflow: 'hidden', justifyContent: 'space-between' },
+  gridCardBgIcon: { position: 'absolute', right: -25, top: 20 },
+  gridCardTitle: { color: '#F9FAFB', fontSize: 18, fontWeight: '800', letterSpacing: -0.3, lineHeight: 20 },
+  gridCardBottom: { marginTop: 'auto' },
+  gridCardValue: { color: '#9CA3AF', fontSize: 10, fontWeight: '700', alignSelf: 'flex-end', marginBottom: 6 },
+  gridCardTrack: { width: '100%', height: 5, backgroundColor: '#333333', borderRadius: 2.5, overflow: 'hidden' },
+  gridCardFill: { height: '100%', backgroundColor: '#0EA5E9', borderRadius: 2.5 },
 
-  // Performance Card
-  performanceCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  performanceHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-  },
-  hudjeeLabel: {
-    color: colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '500',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  performanceTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  performanceValue: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 4,
-  },
-  perfTrack: {
-    width: '100%',
-    height: 5,
-    backgroundColor: colors.border,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  perfFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-
-  // Metrics Grid
-  metricsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,                        // explicit 12px gap between all cards
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  metricCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,               // matches Figma — not too round
-    padding: 14,
-    height: 130,                    // fixed height so all cards are uniform
-    justifyContent: 'space-between',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  metricIconBg: {
-    position: 'absolute',
-    right: -10,
-    bottom: -10,
-    opacity: 0.15,
-  },
-  metricTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 18,
-    maxWidth: '75%',                // prevents text from overlapping icon
-  },
-  metricValueRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  metricValue: {
-    fontSize: 42,
-    fontWeight: '700',
-    lineHeight: 46,
-    letterSpacing: -1,
-  },
-  metricUnit: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 6,
-    marginLeft: 2,
-  },
-  metricProgressContainer: {
-    justifyContent: 'flex-end',
-  },
-  metricProgressLabel: {
-    color: colors.textSecondary,
-    fontSize: 10,
-    textAlign: 'right',
-    marginBottom: 5,
-  },
-  metricTrack: {
-    width: '100%',
-    height: 5,
-    backgroundColor: colors.border,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  metricFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-
-  // Section Header
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    marginTop: 4,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  viewAll: {
-    color: colors.primaryGradientStart,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Learning Card
-  learningCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  learningTitle: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 20,
-  },
-  learningProgressRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 5,
-  },
-  learningProgressLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  learningTrack: {
-    width: '100%',
-    height: 5,
-    backgroundColor: colors.border,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  learningFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
+  continueCard: { backgroundColor: '#111111', borderRadius: 16, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16 },
+  continueTitle: { color: '#F9FAFB', fontSize: 16, fontWeight: '700', marginBottom: 20 },
+  continueBottom: { marginTop: 'auto' },
+  continueValue: { color: '#9CA3AF', fontSize: 10, fontWeight: '700', alignSelf: 'flex-end', marginBottom: 6 },
+  continueTrack: { width: '100%', height: 4, backgroundColor: '#333333', borderRadius: 2, overflow: 'hidden' },
+  continueFill: { height: '100%', backgroundColor: '#0EA5E9', borderRadius: 2 },
 });

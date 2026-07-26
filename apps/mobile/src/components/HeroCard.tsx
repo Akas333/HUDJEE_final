@@ -28,7 +28,7 @@ export default function HeroCard({ label, title, subtitle, tags, progress, stats
 
           <View style={styles.tagsContainer}>
             {tags.map((tag, index) => (
-              <View key={index} style={[styles.tag, { backgroundColor: tag.bgColor, borderColor: tag.color, borderWidth: 1 }]}>
+              <View key={index} style={[styles.tag, { backgroundColor: tag.bgColor, borderColor: tag.color }]}>
                 <Text style={[styles.tagText, { color: tag.color }]}>{tag.text.toUpperCase()}</Text>
               </View>
             ))}
@@ -56,76 +56,87 @@ export default function HeroCard({ label, title, subtitle, tags, progress, stats
 
 const styles = StyleSheet.create({
   cardContainer: {
-    borderRadius: 16,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderBottomWidth: 6,
+    borderBottomColor: colors.border,
     overflow: 'hidden',
-    marginBottom: 24,
-    backgroundColor: colors.card,
+    marginBottom: 32,
+    backgroundColor: colors.surface,
   },
   background: {
     width: '100%',
   },
   backgroundImage: {
-    opacity: 0.6,
+    opacity: 0.2,
   },
   overlay: {
-    padding: 20,
-    backgroundColor: 'rgba(18, 18, 18, 0.4)', // dark overlay to ensure text readability
+    padding: 24,
+    backgroundColor: 'transparent',
   },
   label: {
-    color: '#3B82F6', // Blue color for HUDJEE LEARN
-    fontSize: 10,
-    fontWeight: '800',
-    marginBottom: 4,
+    color: colors.primary, // Cyan color
+    fontSize: 14,
+    fontWeight: '900',
+    marginBottom: 8,
+    letterSpacing: 1,
   },
   title: {
     color: colors.text,
-    fontSize: 32,
-    fontWeight: '800',
-    marginBottom: 4,
+    fontSize: 36,
+    fontWeight: '900', // Black
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
   subtitle: {
     color: colors.textSecondary,
-    fontSize: 12,
-    marginBottom: 16,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 20,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 20,
+    marginBottom: 24,
     gap: 8,
   },
   tag: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 2,
   },
   tagText: {
-    fontSize: 9,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
   },
   progressSection: {
-    marginBottom: 16,
+    marginBottom: 24,
   },
   progressLabel: {
-    color: '#FFFFFF', // pure white in design
-    fontSize: 10,
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
     alignSelf: 'flex-end',
-    marginTop: 4,
+    marginTop: 8,
   },
   statsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
   },
   statPill: {
-    backgroundColor: '#000000', // solid black in design
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
   },
   statText: {
-    color: '#9CA3AF',
-    fontSize: 10,
-    fontWeight: '600',
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '800',
   }
 });

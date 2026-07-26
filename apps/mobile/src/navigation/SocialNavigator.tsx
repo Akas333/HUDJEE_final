@@ -1,21 +1,27 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import SocialScreen from '../screens/Social/SocialScreen';
-import RoomsScreen from '../screens/Social/RoomsScreen';
+import ChallengesScreen from '../screens/Social/ChallengesScreen';
+import SolveChallengeScreen from '../screens/Social/SolveChallengeScreen';
+import ManageFriendsScreen from '../screens/Social/ManageFriendsScreen';
 import LeaderBoardScreen from '../screens/Social/LeaderBoardScreen';
-import RecordsScreen from '../screens/Social/RecordsScreen';
-import DoubtRoomScreen from '../screens/Social/DoubtRoomScreen';
 
 const Stack = createNativeStackNavigator();
 
 export default function SocialNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
-      <Stack.Screen name="SocialScreen" component={SocialScreen} />
-      <Stack.Screen name="RoomsScreen" component={RoomsScreen} />
-      <Stack.Screen name="LeaderBoardScreen" component={LeaderBoardScreen} />
-      <Stack.Screen name="RecordsScreen" component={RecordsScreen} />
-      <Stack.Screen name="DoubtRoomScreen" component={DoubtRoomScreen} />
+      <Stack.Screen name="ChallengesHome" component={ChallengesScreen} />
+      <Stack.Screen 
+        name="SolveChallenge" 
+        component={SolveChallengeScreen} 
+        options={{ gestureEnabled: false }} 
+      />
+      <Stack.Screen 
+        name="ManageFriends" 
+        component={ManageFriendsScreen} 
+        options={{ presentation: 'modal' }}
+      />
+      <Stack.Screen name="LeaderBoard" component={LeaderBoardScreen} />
     </Stack.Navigator>
   );
 }

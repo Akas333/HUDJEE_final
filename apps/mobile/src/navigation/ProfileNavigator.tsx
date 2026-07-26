@@ -2,6 +2,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
 import NotificationsScreen from '../screens/Profile/NotificationsScreen';
+import MistakeNotebookScreen from '../screens/Profile/MistakeNotebookScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -10,6 +11,7 @@ export default function ProfileNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
       <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
       <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} />
+      <Stack.Screen name="MistakeNotebookScreen" component={MistakeNotebookScreen} />
     </Stack.Navigator>
   );
 }

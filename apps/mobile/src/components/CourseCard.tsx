@@ -17,22 +17,21 @@ interface CourseCardProps {
 
 export default function CourseCard({ title, progress, rating, lessons, hours, showActionIcon, onPress, style }: CourseCardProps) {
   return (
-    <TouchableOpacity style={[styles.card, style]} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity style={[styles.card, style]} onPress={onPress} activeOpacity={0.7}>
       <Text style={styles.title}>{title}</Text>
       
       <ProgressBar 
         progress={progress} 
         showText={true} 
-        gradientColors={['#7C3AED', '#8B5CF6']} 
         textFormat={`${progress}%`}
-        textColor="#FFFFFF"
+        textColor={colors.text}
       />
       
       <View style={styles.footer}>
         <View style={styles.metaContainer}>
           {rating && (
             <View style={styles.metaItem}>
-              <Star color={colors.textSecondary} size={10} style={{ marginRight: 2 }} />
+              <Star color={colors.accent} size={14} fill={colors.accent} style={{ marginRight: 4 }} />
               <Text style={styles.metaText}>{rating}</Text>
             </View>
           )}
@@ -42,7 +41,7 @@ export default function CourseCard({ title, progress, rating, lessons, hours, sh
         
         {showActionIcon && (
           <View style={styles.actionIcon}>
-            <ArrowDownRight color={colors.text} size={14} />
+            <ArrowDownRight color={colors.text} size={20} strokeWidth={3} />
           </View>
         )}
       </View>
@@ -52,27 +51,31 @@ export default function CourseCard({ title, progress, rating, lessons, hours, sh
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderBottomWidth: 6,
+    borderBottomColor: colors.border,
+    padding: 24,
+    marginBottom: 20,
   },
   title: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 16,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 16,
   },
   metaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 16,
   },
   metaItem: {
     flexDirection: 'row',
@@ -80,11 +83,12 @@ const styles = StyleSheet.create({
   },
   metaText: {
     color: colors.textSecondary,
-    fontSize: 10,
+    fontSize: 14,
+    fontWeight: '700',
   },
   actionIcon: {
-    backgroundColor: colors.cardElevated,
-    padding: 6,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceElevated,
+    padding: 8,
+    borderRadius: 12,
   }
 });
