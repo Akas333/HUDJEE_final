@@ -64,30 +64,44 @@ const SwipeableCard = ({ card, index, activeIndex, dragX, dragY }) => {
   const animatedStyle = useAnimatedStyle(() => {
     const relativeIndex = (index - activeIndex.value) % TOTAL_CARDS;
     const wrappedIndex = (relativeIndex + TOTAL_CARDS) % TOTAL_CARDS;
+    
     const isFront = wrappedIndex === 0;
 
-    const targetLeft = wrappedIndex === 0 ? 0 : wrappedIndex === 1 ? CONTAINER_WIDTH * 0.20 : CONTAINER_WIDTH * 0.35;
-    const targetTop = wrappedIndex === 0 ? 0 : wrappedIndex === 1 ? 7.5 : 15;
-    const targetWidth = wrappedIndex === 0 ? CONTAINER_WIDTH * 0.68 : CONTAINER_WIDTH * 0.65;
-    const targetHeight = wrappedIndex === 0 ? 220 : wrappedIndex === 1 ? 205 : 190;
+    // Scale and translate layout parameters to prevent layout pass collapses
+    const targetScale = wrappedIndex === 0 ? 1 : wrappedIndex === 1 ? 0.94 : 0.88;
+    const targetTranslateX = wrappedIndex === 0 ? 0 : wrappedIndex === 1 ? CONTAINER_WIDTH * 0.15 : CONTAINER_WIDTH * 0.28;
+    const targetTranslateY = wrappedIndex === 0 ? 0 : wrappedIndex === 1 ? 8 : 16;
     const targetZIndex = 3 - wrappedIndex;
 
-    const currentDragX = isFront ? dragX.value : 0;
-    const currentDragY = isFront ? dragY.value : 0;
+    // Apply drag translations ONLY to the front card
+    const currentTranslateX = isFront ? dragX.value : withSpring(targetTranslateX, { damping: 18, stiffness: 100 });
+    const currentTranslateY = isFront ? dragY.value : withSpring(targetTranslateY, { damping: 18, stiffness: 100 });
+    const scale = withSpring(targetScale, { damping: 18, stiffness: 100 });
     const rotate = isFront ? interpolate(dragX.value, [-width, 0, width], [-10, 0, 10], Extrapolation.CLAMP) : 0;
+
+    // Fade in card when it goes to the back
+    const opacity = wrappedIndex === 2 ? withTiming(1, { duration: 300 }) : 1;
 
     return {
       position: 'absolute',
       zIndex: targetZIndex,
-      left: withSpring(targetLeft, { damping: 16, stiffness: 120 }),
-      top: withSpring(targetTop, { damping: 16, stiffness: 120 }),
-      width: withSpring(targetWidth, { damping: 16, stiffness: 120 }),
-      height: withSpring(targetHeight, { damping: 16, stiffness: 120 }),
+      opacity,
       transform: [
-        { translateX: currentDragX },
-        { translateY: currentDragY },
+        { translateX: currentTranslateX },
+        { translateY: currentTranslateY },
+        { scale },
         { rotate: `${rotate}deg` }
       ]
+    };
+  });
+
+  const contentStyle = useAnimatedStyle(() => {
+    const relativeIndex = (index - activeIndex.value) % TOTAL_CARDS;
+    const wrappedIndex = (relativeIndex + TOTAL_CARDS) % TOTAL_CARDS;
+    const isFront = wrappedIndex === 0;
+    
+    return {
+      opacity: withTiming(isFront ? 1 : 0, { duration: 200 })
     };
   });
 
@@ -99,7 +113,9 @@ const SwipeableCard = ({ card, index, activeIndex, dragX, dragY }) => {
         end={{ x: 1, y: 1 }}
         style={styles.cardSurface}
       >
-        <Text style={styles.silverCardTitle}>{card.title}</Text>
+        <Animated.View style={contentStyle}>
+          <Text style={styles.silverCardTitle}>{card.title}</Text>
+        </Animated.View>
         <View style={styles.starWrapper}>
           {card.icon}
         </View>
@@ -239,6 +255,9 @@ const styles = StyleSheet.create({
   sectionTitle: { color: '#F3F4F6', fontSize: 17, fontWeight: '500', marginBottom: 16 },
   viewAllText: { color: '#60A5FA', fontSize: 13, fontWeight: '600' },
   
+  stackedContainer: { height: 220, position: 'relative', width: '100%' },
+  cardWrapper: { position: 'absolute', width: CONTAINER_WIDTH * 0.68, height: 220, borderRadius: 24, overflow: 'hidden' },
+  cardSurface: { width: '100%', height: '100%', padding: 20, borderRadius: 24, overflow: 'hidden' },
   silverCardTitle: { color: '#111827', fontSize: 17, fontWeight: '800' },
   starWrapper: { position: 'absolute', left: '50%', top: '50%', transform: [{ translateX: -55 }, { translateY: -40 }] },
 
