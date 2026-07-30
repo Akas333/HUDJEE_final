@@ -13,7 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, CheckCircle, XCircle, ArrowRight, SkipForward, AlertCircle } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
-import { MockEngineApi, Question, AnswerResponse, SessionSummary } from '../../services/api.mock';
+import { Question, AnswerResponse, SessionSummary } from '../../services/api.mock';
+import { EngineApi } from '../../services/api';
 
 // ─── MathText Dummy Component ─────────────────────────────────────────────────
 // In a real implementation, replace this with react-native-math-view or react-native-katex
@@ -99,7 +100,7 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
   useEffect(() => {
     const initSession = async () => {
       setStatus('loading');
-      const res = await MockEngineApi.startSession(chapterId);
+      const res = await EngineApi.startSession(chapterId);
       setSessionId(res.session_id);
       setCurrentQ(res.first_question);
       setStatus('answering');
@@ -116,7 +117,7 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
     if (status !== 'answering' || selectedOption === null || !sessionId || !currentQ) return;
     
     setStatus('loading');
-    const res = await MockEngineApi.submitAnswer(sessionId, currentQ.question_id, selectedOption, 2500);
+    const res = await EngineApi.submitAnswer(sessionId, currentQ.question_id, selectedOption, 2500);
     setAnswerData(res);
     setInteractionCount(c => c + 1);
 
@@ -135,7 +136,7 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
     if (status !== 'answering' || !sessionId || !currentQ) return;
     
     setStatus('loading');
-    const res = await MockEngineApi.skipQuestion(sessionId, currentQ.question_id);
+    const res = await EngineApi.skipQuestion(sessionId, currentQ.question_id);
     setInteractionCount(c => c + 1);
 
     if (res.concept_deferred) {
@@ -159,7 +160,7 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
   const handleExit = async () => {
     if (sessionId) {
       setStatus('loading');
-      const summary = await MockEngineApi.endSession(sessionId);
+      const summary = await EngineApi.endSession(sessionId);
       setSummaryData(summary);
       setStatus('summary');
     } else {

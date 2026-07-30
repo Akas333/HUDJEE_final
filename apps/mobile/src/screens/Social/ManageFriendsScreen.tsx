@@ -12,7 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, Share, CheckCircle2, XCircle } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { MockEngineApi, FriendRequest } from '../../services/api.mock';
+import { FriendRequest } from '../../services/api.mock';
+import { EngineApi } from '../../services/api';
 import AnimatedButton from '../../components/AnimatedButton';
 import Skeleton from '../../components/Skeleton';
 import { useToastStore } from '../../services/ToastService';
@@ -29,7 +30,7 @@ export default function ManageFriendsScreen({ navigation }: any) {
   useEffect(() => {
     const fetchRequests = async () => {
       setLoading(true);
-      const data = await MockEngineApi.getFriendRequests();
+      const data = await EngineApi.getFriendRequests();
       setIncoming(data.incoming);
       setOutgoing(data.outgoing);
       setLoading(false);
@@ -39,14 +40,14 @@ export default function ManageFriendsScreen({ navigation }: any) {
 
   const handleSearch = async () => {
     if (!searchQuery) return;
-    await MockEngineApi.addFriend(searchQuery);
+    await EngineApi.addFriend(searchQuery);
     showToast(`Friend request sent to ${searchQuery}`, 'success');
     HapticService.success();
     setSearchQuery('');
   };
 
   const handleRespond = async (id: string, accept: boolean) => {
-    await MockEngineApi.respondFriendRequest(id, accept);
+    await EngineApi.respondFriendRequest(id, accept);
     setIncoming(prev => prev.filter(r => r.request_id !== id));
     showToast(accept ? 'Request accepted' : 'Request declined', 'success');
     HapticService.success();

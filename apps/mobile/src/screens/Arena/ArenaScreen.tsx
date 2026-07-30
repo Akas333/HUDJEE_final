@@ -12,7 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Zap, Check, Lock, Play } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
-import { MockEngineApi, ArenaChapter, ArenaRating } from '../../services/api.mock';
+import { ArenaChapter, ArenaRating } from '../../services/api.mock';
+import { EngineApi } from '../../services/api';
 
 export default function ArenaScreen({ navigation }: any) {
   const [chapters, setChapters] = useState<ArenaChapter[]>([]);
@@ -28,8 +29,8 @@ export default function ArenaScreen({ navigation }: any) {
     const fetchData = async () => {
       setLoading(true);
       const [rData, cData] = await Promise.all([
-        MockEngineApi.getArenaRating(),
-        MockEngineApi.getArenaChapters()
+        EngineApi.getArenaRating(),
+        EngineApi.getArenaChapters()
       ]);
       setRatingData(rData);
       setChapters(cData);

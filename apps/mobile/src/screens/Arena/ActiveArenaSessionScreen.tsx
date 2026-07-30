@@ -13,7 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, CheckCircle, ArrowRight, Zap, Target, BookOpen } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
-import { MockEngineApi, Question, ArenaAnswerResponse, ArenaSessionSummary } from '../../services/api.mock';
+import { Question, ArenaAnswerResponse, ArenaSessionSummary } from '../../services/api.mock';
+import { EngineApi } from '../../services/api';
 
 const MathText = ({ content, style }: { content: string, style?: any }) => {
   return <Text style={[style, { fontFamily: 'System' }]}>{content}</Text>;
@@ -42,7 +43,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
   
   // Timer state
   const [timeLeft, setTimeLeft] = useState(60);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Stop Timer
   const stopTimer = () => {
@@ -89,10 +90,10 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
   useEffect(() => {
     const initSession = async () => {
       setStatus('loading');
-      const r = await MockEngineApi.getArenaRating();
+      const r = await EngineApi.getArenaRating();
       setRating(r.rating);
 
-      const res = await MockEngineApi.startArenaSession(chapterIds, timedMode);
+      const res = await EngineApi.startArenaSession(chapterIds, timedMode);
       setSessionId(res.session_id);
       setCurrentQ(res.first_question);
       setStatus('answering');
@@ -126,7 +127,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
     setStatus('loading');
     
     // We pass a dummy index (-1) which will naturally be incorrect
-    const res = await MockEngineApi.submitArenaAnswer(sessionId, currentQ.question_id, -1, 60000);
+    const res = await EngineApi.submitArenaAnswer(sessionId, currentQ.question_id, -1, 60000);
     
     setAnswerData(res);
     setRating(res.new_rating);
@@ -142,7 +143,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
     setStatus('loading');
     
     const timeTakenMs = (60 - timeLeft) * 1000;
-    const res = await MockEngineApi.submitArenaAnswer(sessionId, currentQ.question_id, selectedOption, timeTakenMs);
+    const res = await EngineApi.submitArenaAnswer(sessionId, currentQ.question_id, selectedOption, timeTakenMs);
     
     setAnswerData(res);
     setRating(res.new_rating);
@@ -164,7 +165,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
     
     stopTimer();
     setStatus('loading');
-    const res = await MockEngineApi.skipArenaQuestion(sessionId, currentQ.question_id);
+    const res = await EngineApi.skipArenaQuestion(sessionId, currentQ.question_id);
     handleAdvance(res.next_question);
   };
 
@@ -184,7 +185,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
     stopTimer();
     if (sessionId) {
       setStatus('loading');
-      const summary = await MockEngineApi.endArenaSession(sessionId);
+      const summary = await EngineApi.endArenaSession(sessionId);
       setSummaryData(summary);
       setStatus('summary');
     } else {

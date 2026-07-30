@@ -1,6 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import PracticeScreen from '../screens/Learn/PracticeScreen';
+import PracticeConceptScreen from '../screens/Learn/PracticeConceptScreen';
 import UnitCardScreen from '../screens/Learn/UnitCardScreen';
 import ChapterCardScreen from '../screens/Learn/ChapterCardScreen';
 import LecturesListScreen from '../screens/Learn/LecturesListScreen';
@@ -16,6 +17,7 @@ export default function PracticeNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
       <Stack.Screen name="PracticeScreen" component={PracticeScreen} />
+      <Stack.Screen name="PracticeConceptScreen" component={PracticeConceptScreen} />
       <Stack.Screen name="AdaptiveSessionScreen" component={AdaptiveSessionScreen} />
       <Stack.Screen name="UnitCardScreen" component={UnitCardScreen} />
       <Stack.Screen name="ChapterCardScreen" component={ChapterCardScreen} />

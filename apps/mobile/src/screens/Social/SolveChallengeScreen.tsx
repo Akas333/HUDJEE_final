@@ -11,7 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, CheckCircle2, XCircle, ArrowRight } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
-import { MockEngineApi, Question } from '../../services/api.mock';
+import { Question } from '../../services/api.mock';
+import { EngineApi } from '../../services/api';
 import MathText from '../../components/MathText';
 import AnimatedButton from '../../components/AnimatedButton';
 import Skeleton from '../../components/Skeleton';
@@ -35,7 +36,7 @@ export default function SolveChallengeScreen({ route, navigation }: any) {
   useEffect(() => {
     const fetchQ = async () => {
       setLoading(true);
-      const q = await MockEngineApi.getChallengeQuestion(challengeId);
+      const q = await EngineApi.getChallengeQuestion(challengeId);
       setQuestion(q);
       setLoading(false);
     };
@@ -55,7 +56,7 @@ export default function SolveChallengeScreen({ route, navigation }: any) {
     const isFirstTry = attempts === 0;
     setAttempts(prev => prev + 1);
     
-    const res = await MockEngineApi.submitChallengeAnswer(challengeId, selectedOption, isFirstTry);
+    const res = await EngineApi.submitChallengeAnswer(challengeId, selectedOption, isFirstTry);
     
     setExplanation(res.short_explanation);
     
@@ -195,7 +196,7 @@ export default function SolveChallengeScreen({ route, navigation }: any) {
 
       {/* Footer CTA */}
       <View style={styles.footer}>
-        {(state === 'reading' || state === 'failed') && (
+        {(state === 'reading' || state === 'failed' || state === 'evaluating') && (
           <AnimatedButton 
             hapticType="medium"
             style={[styles.submitBtn, selectedOption === null && styles.submitBtnDisabled]}

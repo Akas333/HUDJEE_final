@@ -12,7 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Flame, Snowflake, Plus, Trophy, ChevronRight, Swords, Clock, CheckCircle2, XCircle, Zap } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
-import { MockEngineApi, Challenge, Friend } from '../../services/api.mock';
+import { Challenge, Friend } from '../../services/api.mock';
+import { EngineApi } from '../../services/api';
 import AnimatedButton from '../../components/AnimatedButton';
 import Skeleton from '../../components/Skeleton';
 import { HapticService } from '../../services/HapticService';
@@ -67,9 +68,9 @@ export default function ChallengesScreen({ navigation }: any) {
     const fetchData = async () => {
       setLoading(true);
       const [fData, inData, outData] = await Promise.all([
-        MockEngineApi.getFriends(),
-        MockEngineApi.getIncomingChallenges(),
-        MockEngineApi.getSentChallenges()
+        EngineApi.getFriends(),
+        EngineApi.getIncomingChallenges(),
+        EngineApi.getSentChallenges()
       ]);
       setFriends(fData);
       setIncoming(inData);
@@ -93,10 +94,10 @@ export default function ChallengesScreen({ navigation }: any) {
   const handleSendChallenge = async () => {
     if (!selectedFriend) return;
     setSending(true);
-    await MockEngineApi.sendChallenge(selectedFriend.friend_id, selectedMode);
+    await EngineApi.sendChallenge(selectedFriend.friend_id, selectedMode);
     
     // Refresh sent challenges
-    const outData = await MockEngineApi.getSentChallenges();
+    const outData = await EngineApi.getSentChallenges();
     setSent(outData);
     
     setSending(false);

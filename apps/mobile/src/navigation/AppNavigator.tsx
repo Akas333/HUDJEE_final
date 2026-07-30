@@ -19,10 +19,15 @@ export default function AppNavigator() {
   const { session, setSession, isInitialized, setInitialized } = useAuthStore();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setInitialized(true);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setInitialized(true);
+      })
+      .catch((err) => {
+        console.error('Supabase getSession error:', err);
+        setInitialized(true);
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);

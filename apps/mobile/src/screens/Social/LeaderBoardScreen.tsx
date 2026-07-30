@@ -11,7 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Trophy, Globe, Users } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
-import { MockEngineApi, Friend } from '../../services/api.mock';
+import { Friend } from '../../services/api.mock';
+import { EngineApi } from '../../services/api';
 
 export default function LeaderBoardScreen({ navigation }: any) {
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -22,7 +23,7 @@ export default function LeaderBoardScreen({ navigation }: any) {
     const fetchLB = async () => {
       setLoading(true);
       // For now, global just shows friends + some dummy global users
-      const data = await MockEngineApi.getFriends();
+      const data = await EngineApi.getFriends();
       let lbData = [...data];
       if (scope === 'global') {
         lbData.push({ friend_id: 'g1', name: 'Alakh P.', avatar_url: 'https://i.pravatar.cc/150?u=g1', xp_this_week: 5400 });

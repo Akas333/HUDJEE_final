@@ -13,14 +13,14 @@ import ProfileNavigator from './ProfileNavigator';
 const Tab = createBottomTabNavigator();
 
 // Custom Home Icon (No door, matched to design)
-const HomeIcon = ({ color, size, strokeWidth }) => (
+const HomeIcon = ({ color, size, strokeWidth }: { color: string; size: number; strokeWidth: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
     <Path d="M3 10L12 3l9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V10z" />
   </Svg>
 );
 
 // Custom Book Icon (Pointed spine, matched to design)
-const BookIcon = ({ color, size, strokeWidth }) => (
+const BookIcon = ({ color, size, strokeWidth }: { color: string; size: number; strokeWidth: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
     <Path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
     <Path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />

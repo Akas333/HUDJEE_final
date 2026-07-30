@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, DimensionValue } from 'react-native';
 import { colors } from '../../theme/colors';
 
 interface MetricBoxProps {
@@ -7,7 +7,7 @@ interface MetricBoxProps {
   value: string | number;
   unit?: string;
   children?: React.ReactNode; // For custom graphics like the target or clipboard
-  width?: string | number;
+  width?: DimensionValue;
 }
 
 export default function MetricBox({ title, value, unit, children, width = '48%' }: MetricBoxProps) {
