@@ -17,7 +17,12 @@ export default function ChaptersPage() {
   const fetchChapters = async () => {
     const res = await fetch('/api/chapters');
     const data = await res.json();
-    setChapters(data || []);
+    if (Array.isArray(data)) {
+      setChapters(data);
+    } else {
+      console.error(data.error || 'Failed to fetch chapters');
+      setChapters([]);
+    }
   };
 
   const addChapter = async (e: React.FormEvent) => {

@@ -40,14 +40,24 @@ export default function NewQuestionPage() {
   const fetchChapters = async () => {
     const res = await fetch('/api/chapters');
     const data = await res.json();
-    setChapters(data.filter((c: any) => c.subject === formData.subject) || []);
+    if (Array.isArray(data)) {
+      setChapters(data.filter((c: any) => c.subject === formData.subject));
+    } else {
+      console.error(data.error || 'Failed to fetch chapters');
+      setChapters([]);
+    }
     setFormData(prev => ({ ...prev, chapter_id: '', concept_id: '' }));
   };
 
   const fetchTopics = async (chapterId: string) => {
     const res = await fetch(`/api/topics?chapter_id=${chapterId}`);
     const data = await res.json();
-    setTopics(data || []);
+    if (Array.isArray(data)) {
+      setTopics(data);
+    } else {
+      console.error(data.error || 'Failed to fetch topics');
+      setTopics([]);
+    }
     setFormData(prev => ({ ...prev, concept_id: '' }));
   };
 

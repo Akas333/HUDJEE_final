@@ -18,13 +18,23 @@ export default function TopicsPage() {
   const fetchChapters = async () => {
     const res = await fetch('/api/chapters');
     const data = await res.json();
-    setChapters(data || []);
+    if (Array.isArray(data)) {
+      setChapters(data);
+    } else {
+      console.error(data.error || 'Failed to fetch chapters');
+      setChapters([]);
+    }
   };
 
   const fetchTopics = async (chapterId: string) => {
     const res = await fetch(`/api/topics${chapterId ? `?chapter_id=${chapterId}` : ''}`);
     const data = await res.json();
-    setTopics(data || []);
+    if (Array.isArray(data)) {
+      setTopics(data);
+    } else {
+      console.error(data.error || 'Failed to fetch topics');
+      setTopics([]);
+    }
   };
 
   const handleFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
