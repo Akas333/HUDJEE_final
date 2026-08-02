@@ -1,146 +1,132 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TextInput,
-  Image,
-  TouchableOpacity
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Search, Share, CheckCircle2, XCircle } from 'lucide-react-native';
+import { UserPlus } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { FriendRequest } from '../../services/api.mock';
-import { EngineApi } from '../../services/api';
-import AnimatedButton from '../../components/AnimatedButton';
-import Skeleton from '../../components/Skeleton';
+import { useChallengesStore } from '../../store/challengesStore';
 import { useToastStore } from '../../services/ToastService';
 import { HapticService } from '../../services/HapticService';
+import { ListRowCard } from '../../components/ListRowCard';
+import Skeleton from '../../components/Skeleton';
 
-export default function ManageFriendsScreen({ navigation }: any) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [incoming, setIncoming] = useState<FriendRequest[]>([]);
-  const [outgoing, setOutgoing] = useState<FriendRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function ManageFriendsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<any>>();
+  const { 
+    friends, 
+    friendRequestsIncoming, 
+    respondFriendRequest, 
+    removeFriend, 
+  } = useChallengesStore();
   
-  const { showToast } = useToastStore();
-  
+  const showToast = useToastStore((state) => state.showToast);
+
+  const fetchFriends = useChallengesStore((state) => (state as any).fetchFriends);
+  const fetchFriendRequests = useChallengesStore((state) => (state as any).fetchFriendRequests);
+
+  const isLoading = !friends;
+
   useEffect(() => {
-    const fetchRequests = async () => {
-      setLoading(true);
-      const data = await EngineApi.getFriendRequests();
-      setIncoming(data.incoming);
-      setOutgoing(data.outgoing);
-      setLoading(false);
-    };
-    fetchRequests();
-  }, []);
+    if (fetchFriends) fetchFriends();
+    if (fetchFriendRequests) fetchFriendRequests();
+  }, [fetchFriends, fetchFriendRequests]);
 
-  const handleSearch = async () => {
-    if (!searchQuery) return;
-    await EngineApi.addFriend(searchQuery);
-    showToast(`Friend request sent to ${searchQuery}`, 'success');
-    HapticService.success();
-    setSearchQuery('');
-  };
-
-  const handleRespond = async (id: string, accept: boolean) => {
-    await EngineApi.respondFriendRequest(id, accept);
-    setIncoming(prev => prev.filter(r => r.request_id !== id));
-    showToast(accept ? 'Request accepted' : 'Request declined', 'success');
-    HapticService.success();
-  };
-
-  const handleShare = () => {
-    showToast('Invite link copied to clipboard!', 'success');
+  const handleAddFriend = () => {
     HapticService.light();
+    // Open add friend sheet/modal
+  };
+
+  const handleAcceptRequest = (id: string, name: string) => {
+    HapticService.success();
+    respondFriendRequest(id, true);
+    showToast(`Added ${name}`, 'success');
+  };
+
+  const handleDeclineRequest = (id: string) => {
+    HapticService.light();
+    respondFriendRequest(id, false);
+  };
+
+  const handleRemoveFriend = (id: string, name: string) => {
+    HapticService.light();
+    removeFriend(id);
+    showToast(`${name} removed`, 'success');
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
+    <SafeAreaView edges={['top']} style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ChevronLeft color={colors.text} size={28} />
+        <Text style={styles.headerTitle}>Friends</Text>
+        <TouchableOpacity style={styles.addButton} onPress={handleAddFriend}>
+          <UserPlus color={colors.hudjeeTextPrimary} size={24} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Friends</Text>
-        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* Search */}
-        <View style={styles.searchBox}>
-          <Search color={colors.textSecondary} size={20} style={{ marginLeft: 12 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search username"
-            placeholderTextColor={colors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearch}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={handleSearch} style={styles.searchAddBtn}>
-              <Text style={styles.searchAddText}>Add</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Share Link */}
-        <AnimatedButton style={styles.shareCard} onPress={handleShare}>
-          <View style={styles.shareIconBox}>
-            <Share color={colors.primary} size={24} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.shareTitle}>Invite a friend</Text>
-            <Text style={styles.shareDesc}>Send them your personal invite link</Text>
-          </View>
-        </AnimatedButton>
-
-        {loading ? (
-          <View style={{ gap: 12 }}>
-             <Text style={styles.sectionTitle}>Incoming Requests</Text>
-             <Skeleton width="100%" height={64} borderRadius={12} />
-             <Skeleton width="100%" height={64} borderRadius={12} />
-          </View>
-        ) : (
-          <>
-            {incoming.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Incoming Requests</Text>
-                {incoming.map(req => (
-                  <View key={req.request_id} style={styles.requestRow}>
-                    <Image source={{ uri: req.user.avatar_url }} style={styles.avatar} />
-                    <Text style={styles.requestName}>{req.user.name}</Text>
-                    <View style={styles.actions}>
-                      <TouchableOpacity onPress={() => handleRespond(req.request_id, false)}>
-                        <XCircle color={colors.textSecondary} size={28} />
+        {/* Pending Requests */}
+        {friendRequestsIncoming && friendRequestsIncoming.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Pending Requests</Text>
+            <View style={styles.listContainer}>
+              {friendRequestsIncoming.map((req) => (
+                <ListRowCard avatarInitials="JD"
+                  key={req.friend_id}
+                  title={req.name}
+                  subtitle="Wants to be friends"
+                  avatarUrl={req.avatar_url}
+                  rightElement={
+                    <View style={styles.requestActions}>
+                      <TouchableOpacity 
+                        style={styles.declineButton} 
+                        onPress={() => handleDeclineRequest(req.friend_id)}
+                      >
+                        <Text style={styles.declineText}>Decline</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleRespond(req.request_id, true)} style={{ marginLeft: 12 }}>
-                        <CheckCircle2 color={colors.primary} size={28} />
+                      <TouchableOpacity 
+                        style={styles.acceptButton} 
+                        onPress={() => handleAcceptRequest(req.friend_id, req.name)}
+                      >
+                        <Text style={styles.acceptText}>Accept</Text>
                       </TouchableOpacity>
                     </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {outgoing.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Sent Requests</Text>
-                {outgoing.map(req => (
-                  <View key={req.request_id} style={styles.requestRow}>
-                    <Image source={{ uri: req.user.avatar_url }} style={styles.avatar} />
-                    <Text style={styles.requestName}>{req.user.name}</Text>
-                    <Text style={styles.statusText}>Pending</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </>
+                  }
+                />
+              ))}
+            </View>
+          </View>
         )}
+
+        {/* Your Friends */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your Friends</Text>
+          <View style={styles.listContainer}>
+            {isLoading ? (
+              <>
+                <Skeleton height={72} borderRadius={16} />
+                <Skeleton height={72} borderRadius={16} />
+                <Skeleton height={72} borderRadius={16} />
+              </>
+            ) : friends && friends.length > 0 ? (
+              friends.map((friend) => (
+                <ListRowCard avatarInitials="JD"
+                  key={friend.friend_id}
+                  title={friend.name}
+                  subtitle={`Arena ${friend.arena_rating} • ${friend.streak_length} day streak`}
+                  avatarUrl={friend.avatar_url}
+                  onPress={() => {}}
+                />
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No friends yet.</Text>
+              </View>
+            )}
+          </View>
+        </View>
 
       </ScrollView>
     </SafeAreaView>
@@ -148,29 +134,79 @@ export default function ManageFriendsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  backBtn: { padding: 4, marginLeft: -4 },
-  headerTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  
-  content: { padding: 20 },
-  
-  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 24, paddingRight: 8 },
-  searchInput: { flex: 1, color: colors.text, fontSize: 16, padding: 16 },
-  searchAddBtn: { backgroundColor: colors.surfaceLight, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  searchAddText: { color: colors.text, fontWeight: '600' },
-
-  shareCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: colors.border, marginBottom: 32 },
-  shareIconBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#9B6FFF20', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  shareTitle: { color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  shareDesc: { color: colors.textSecondary, fontSize: 13 },
-
-  section: { marginBottom: 32 },
-  sectionTitle: { color: colors.textSecondary, fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 16 },
-  
-  requestRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, marginBottom: 12 },
-  avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
-  requestName: { color: colors.text, fontSize: 16, fontWeight: '500', flex: 1 },
-  actions: { flexDirection: 'row', alignItems: 'center' },
-  statusText: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' }
+  container: {
+    flex: 1,
+    backgroundColor: colors.hudjeeBgBase,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hudjeeBorderSubtle,
+  },
+  headerTitle: {
+    ...typography.hudjee.display,
+    fontSize: 28, // slightly smaller for top app bar
+    color: colors.hudjeeTextPrimary,
+  },
+  addButton: {
+    padding: 8,
+    marginRight: -8,
+  },
+  scrollContent: {
+    padding: 24,
+    gap: 32,
+  },
+  section: {
+    gap: 16,
+  },
+  sectionTitle: {
+    ...typography.hudjee.headingMd,
+    color: colors.hudjeeTextPrimary,
+  },
+  listContainer: {
+    gap: 12,
+  },
+  requestActions: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  acceptButton: {
+    backgroundColor: colors.hudjeeMilestoneStart,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  acceptText: {
+    ...typography.hudjee.label,
+    color: colors.hudjeeBgBase,
+    fontFamily: typography.hudjee.headingMd.fontFamily,
+  },
+  declineButton: {
+    backgroundColor: colors.hudjeeSurfaceCardElevated,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  declineText: {
+    ...typography.hudjee.label,
+    color: colors.hudjeeTextPrimary,
+    fontFamily: typography.hudjee.headingMd.fontFamily,
+  },
+  emptyState: {
+    padding: 24,
+    alignItems: 'center',
+    backgroundColor: colors.hudjeeSurfaceCard,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.hudjeeBorderSubtle,
+  },
+  emptyStateText: {
+    ...typography.hudjee.body,
+    color: colors.hudjeeTextSecondary,
+  },
 });

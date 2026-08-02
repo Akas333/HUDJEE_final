@@ -42,6 +42,37 @@ export const colors = {
   primaryLight: '#7DD3FC',
   card: '#111827',
   cardElevated: '#1F2937',
+
+  // ── Challenges / Social palette ──
+  chalkboardGreen: '#22C55E',                   // streak active, challenge win
+  chalkboardGreenBg: 'rgba(34, 197, 94, 0.1)',
+  brassGold: '#E8B84B',                         // milestone accent
+  brassGoldBg: 'rgba(232, 184, 75, 0.12)',
+  amberRisk: '#FBBF24',                         // streak at-risk (warm, not alarm-red)
+  amberRiskBg: 'rgba(251, 191, 36, 0.1)',
+  frozenBlue: '#4ECDC4',                        // streak freeze
+  frozenBlueBg: 'rgba(78, 205, 196, 0.08)',
+
+  // ── HudJee Visual System (Challenges V2) ──
+  hudjeeBgBase: '#0B0B0E',
+  hudjeeSurfaceCard: '#1B1B20',
+  hudjeeSurfaceCardElevated: '#232329',
+  hudjeeSurfaceCardPressed: '#28282F',
+  hudjeeBorderSubtle: '#2A2A30',
+  hudjeeTextPrimary: '#F5F5F7',
+  hudjeeTextSecondary: '#8B8B93',
+  hudjeeTextTertiary: '#55555C',
+  hudjeeOverlayScrim: 'rgba(0, 0, 0, 0.6)',
+  
+  hudjeeProgressStart: '#46D8E0',
+  hudjeeProgressEnd: '#3FE8A6',
+  hudjeeMilestoneStart: '#E3B24C',
+  hudjeeMilestoneEnd: '#F0CE7E',
+  hudjeeHeroStart: '#4B4870',
+  hudjeeHeroEnd: '#7A7FBE',
+  
+  hudjeeStateAtRisk: '#D9A94E',
+  hudjeeStateWin: '#3FE8A6',
+  hudjeeStateLoss: '#6B6B78',
+  hudjeeStateTie: '#8B8B93',
 };
-
-

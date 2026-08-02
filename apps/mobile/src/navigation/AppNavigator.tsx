@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import BottomTabNavigator from './BottomTabNavigator';
 import AuthNavigator from './AuthNavigator';
 import TestAnalysisNavigator from './TestAnalysisNavigator';
+import SettingsNavigator from './SettingsNavigator';
 import { useAuthStore } from '../store/authStore';
 import { supabase } from '../lib/supabase';
 
@@ -11,6 +12,7 @@ export type RootStackParamList = {
   Auth: undefined;
   MainTabs: undefined;
   TestAnalysisStack: undefined;
+  SettingsStack: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -46,6 +48,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Auth" component={AuthNavigator} />
         <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
         <Stack.Screen name="TestAnalysisStack" component={TestAnalysisNavigator} />
+        <Stack.Screen name="SettingsStack" component={SettingsNavigator} />
       </Stack.Navigator>
     </NavigationContainer>
   );

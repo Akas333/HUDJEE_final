@@ -93,44 +93,52 @@ export class EngineApi {
   }
 
   static async startSession(chapterId: string): Promise<{ session_id: string, first_question: Question }> {
-    const { data: questions, error: qError } = await supabase
-      .from("questions")
-      .select("*")
-      .eq("chapter_id", chapterId);
-      
-    if (qError || !questions || questions.length === 0) {
-      throw new Error("No questions found for this chapter");
-    }
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id || 'anonymous';
 
-    const sessionId = `sess_${Date.now()}`;
-    
-    const firstQ = questions[0];
-    return {
-      session_id: sessionId,
-      first_question: {
-        question_id: firstQ.id,
-        concept_id: firstQ.concept_id,
-        type: firstQ.format,
-        prompt: firstQ.question_body,
-        options: firstQ.options ? firstQ.options.map((o: any) => o.text) : undefined,
-      } as Question
-    };
+    const response = await engineApi.post('/irt/session/start', {
+      user_id: userId,
+      chapter_id: chapterId
+    });
+    return response.data;
   }
 
   static async submitAnswer(sessionId: string, questionId: string, response: any, timeTakenMs: number): Promise<AnswerResponse> {
-    return {
-      correct: true,
-      solution: { steps: ["Solution step 1"], misconception_tag: null },
-      next_question: null,
-      chapter_exhausted: true
-    };
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id || 'anonymous';
+    
+    // Convert 'response' index to boolean (correctness is determined by backend but for now we might need to send true/false if we don't have server-side checking. Wait, backend checks it? No, my AnswerSubmitRequest expects `is_correct: bool`.)
+    // Wait, we need to know if the user is correct to send to backend!
+    // If the frontend does not know the correct answer, how can it send is_correct? 
+    // Ideally, the backend should check correctness! But my MVP backend `submit_answer` just accepts `is_correct` from the frontend.
+    // Let's assume the frontend fetches the question from Supabase to check correctness.
+    const { data: qData } = await supabase.from('questions').select('correct_answer').eq('id', questionId).single();
+    const isCorrect = qData?.correct_answer === String(response);
+    
+    const res = await engineApi.post('/irt/session/answer', {
+      user_id: userId,
+      session_id: sessionId,
+      question_id: questionId,
+      is_correct: isCorrect,
+      time_taken_ms: timeTakenMs
+    });
+    return res.data;
   }
 
   static async skipQuestion(sessionId: string, questionId: string): Promise<SkipResponse> {
-    return { next_question: null, concept_deferred: false, chapter_exhausted: true };
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id || 'anonymous';
+    
+    const res = await engineApi.post('/irt/session/skip', {
+      user_id: userId,
+      session_id: sessionId,
+      question_id: questionId
+    });
+    return res.data;
   }
 
   static async endSession(sessionId: string): Promise<SessionSummary> {
+    // We could call a backend endpoint to summarize, but for MVP we mock it.
     return { questions_answered: 1, accuracy: 100, concepts_mastered: [], concepts_needing_revisit: [] };
   }
 

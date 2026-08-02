@@ -1,90 +1,140 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Animated
-} from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, CheckCircle2, XCircle, ArrowRight } from 'lucide-react-native';
-import { colors } from '../../theme/colors';
-import { Question } from '../../services/api.mock';
-import { EngineApi } from '../../services/api';
-import MathText from '../../components/MathText';
-import AnimatedButton from '../../components/AnimatedButton';
-import Skeleton from '../../components/Skeleton';
-import { HapticService } from '../../services/HapticService';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
+import { ChevronLeft, Clock } from 'lucide-react-native';
 
-export default function SolveChallengeScreen({ route, navigation }: any) {
-  const { challengeId } = route.params || { challengeId: 'mock' };
-  const [question, setQuestion] = useState<Question | null>(null);
+import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { useChallengesStore } from '../../store/challengesStore';
+import { MockEngineApi } from '../../services/api.mock';
+import type { ChallengeV2, ChallengeAnswer, Question } from '../../services/api.mock';
+
+import AnimatedButton from '../../components/AnimatedButton';
+import MathText from '../../components/MathText';
+import Skeleton from '../../components/Skeleton';
+import ProgressBar from '../../components/ProgressBar';
+
+type SolveChallengeRouteProp = RouteProp<{ params: { challengeId: string } }, 'params'>;
+
+export default function SolveChallengeScreen() {
+  const navigation = useNavigation<any>();
+  const route = useRoute<SolveChallengeRouteProp>();
+  const { challengeId } = route.params;
+
+  const submitChallengeAnswers = useChallengesStore((s) => s.submitChallengeAnswers);
+
+  const [challenge, setChallenge] = useState<ChallengeV2 | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState<ChallengeAnswer[]>([]);
   
-  // State machine: 'reading' -> 'evaluating' -> 'success_first_try' | 'success' | 'failed'
-  const [state, setState] = useState<'reading' | 'evaluating' | 'success_first_try' | 'success' | 'failed'>('reading');
-  const [attempts, setAttempts] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [explanation, setExplanation] = useState<string>('');
+  const [questionStartTime, setQuestionStartTime] = useState<number>(Date.now());
   
-  // Animation for success
-  const scaleAnim = useState(new Animated.Value(0.8))[0];
-  const opacityAnim = useState(new Animated.Value(0))[0];
+  const [totalElapsedSeconds, setTotalElapsedSeconds] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Prevent swipe back
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: false });
+  }, [navigation]);
 
   useEffect(() => {
-    const fetchQ = async () => {
-      setLoading(true);
-      const q = await EngineApi.getChallengeQuestion(challengeId);
-      setQuestion(q);
-      setLoading(false);
-    };
-    fetchQ();
+    loadChallenge();
   }, [challengeId]);
 
-  const handleSelectOption = (index: number) => {
-    if (state !== 'reading' && state !== 'failed') return;
-    HapticService.light();
-    setSelectedOption(index);
-  };
+  useEffect(() => {
+    // Start global timer
+    timerRef.current = setInterval(() => {
+      setTotalElapsedSeconds(prev => prev + 1);
+    }, 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
-  const handleSubmit = async () => {
-    if (selectedOption === null || !question) return;
-    
-    setState('evaluating');
-    const isFirstTry = attempts === 0;
-    setAttempts(prev => prev + 1);
-    
-    const res = await EngineApi.submitChallengeAnswer(challengeId, selectedOption, isFirstTry);
-    
-    setExplanation(res.short_explanation);
-    
-    if (res.correct) {
-      if (isFirstTry) {
-        setState('success_first_try');
-        HapticService.success();
-        // Trigger celebration animation
-        Animated.parallel([
-          Animated.spring(scaleAnim, { toValue: 1, friction: 4, useNativeDriver: true }),
-          Animated.timing(opacityAnim, { toValue: 1, duration: 300, useNativeDriver: true })
-        ]).start();
+  const loadChallenge = async () => {
+    try {
+      const data = await MockEngineApi.getChallengeDetail(challengeId);
+      if (data) {
+        setChallenge(data);
       } else {
-        setState('success');
-        HapticService.success();
+        Alert.alert('Error', 'Challenge not found');
+        navigation.goBack();
       }
-    } else {
-      setState('failed');
-      HapticService.error();
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Failed to load challenge');
+      navigation.goBack();
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading || !question) {
+  const handleBackPress = useCallback(() => {
+    Alert.alert(
+      'Quit Challenge?',
+      'If you leave now, your progress will be lost.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Quit', style: 'destructive', onPress: () => navigation.goBack() }
+      ]
+    );
+  }, [navigation]);
+
+  const handleNext = async () => {
+    if (!challenge || selectedOption === null) return;
+
+    const currentQuestion = challenge.questions[currentIndex];
+    const timeTakenMs = Date.now() - questionStartTime;
+    
+    // For mock purposes, index 0 is always correct if not specified, 
+    // but a real app would use the actual correct index.
+    const isCorrect = selectedOption === 0;
+
+    const answer: ChallengeAnswer = {
+      question_id: currentQuestion.question_id,
+      selected_answer: selectedOption,
+      is_correct: isCorrect,
+      time_taken_ms: timeTakenMs,
+    };
+
+    const newAnswers = [...answers, answer];
+    
+    if (currentIndex < challenge.questions.length - 1) {
+      setAnswers(newAnswers);
+      setSelectedOption(null);
+      setCurrentIndex(prev => prev + 1);
+      setQuestionStartTime(Date.now());
+    } else {
+      // Finish
+      setSubmitting(true);
+      try {
+        const result = await submitChallengeAnswers(challengeId, newAnswers);
+        navigation.replace('ChallengeResult', { challengeId, result });
+      } catch (err) {
+        console.error(err);
+        Alert.alert('Error', 'Failed to submit answers');
+        setSubmitting(false);
+      }
+    }
+  };
+
+  const formatTime = (totalSeconds: number) => {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  if (loading) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <ChevronLeft color={colors.text} size={28} />
+            <ChevronLeft color={colors.hudjeeTextPrimary} size={28} />
           </TouchableOpacity>
         </View>
         <View style={{ flex: 1, padding: 20, gap: 16 }}>
@@ -97,168 +147,200 @@ export default function SolveChallengeScreen({ route, navigation }: any) {
     );
   }
 
+  if (!challenge || !challenge.questions || challenge.questions.length === 0) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+         <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <ChevronLeft color={colors.hudjeeTextPrimary} size={28} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No questions found.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const currentQuestion = challenge.questions[currentIndex];
+  const progress = (currentIndex) / challenge.questions.length;
+  const isLastQuestion = currentIndex === challenge.questions.length - 1;
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      {/* Thin Progress Bar */}
+      <View style={styles.progressBarContainer}>
+        <ProgressBar progress={progress} />
+      </View>
+
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} disabled={state === 'evaluating'}>
-          <ChevronLeft color={colors.text} size={28} />
+        <TouchableOpacity style={styles.backBtn} onPress={handleBackPress}>
+          <ChevronLeft color={colors.hudjeeTextPrimary} size={28} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Challenge</Text>
-        <View style={{ width: 40 }} />
+        
+        <Text style={styles.headerTitle}>
+          Question {currentIndex + 1} of {challenge.questions.length}
+        </Text>
+
+        <View style={styles.timerContainer}>
+          <Clock color={colors.hudjeeTextSecondary} size={16} />
+          <Text style={styles.timerText}>{formatTime(totalElapsedSeconds)}</Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        
-        {/* Success First Try Overlay */}
-        {state === 'success_first_try' && (
-          <Animated.View style={[styles.successFirstTryBox, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}>
-            <Text style={styles.sftEmoji}>🔥</Text>
-            <Text style={styles.sftTitle}>First Try Solve!</Text>
-            <Text style={styles.sftSub}>You nailed it instantly. Your friend has been notified.</Text>
-          </Animated.View>
-        )}
-
-        {/* Failed State Nudge */}
-        {state === 'failed' && (
-          <View style={styles.failedBox}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <XCircle color="#FF6B6B" size={24} />
-              <Text style={styles.failedTitle}>Not quite right</Text>
-            </View>
-            <Text style={styles.failedExp}>{explanation}</Text>
-            <TouchableOpacity style={styles.practiceNudgeBtn} onPress={() => navigation.navigate('PracticeNavigator')}>
-              <Text style={styles.practiceNudgeText}>Practice this concept</Text>
-              <ArrowRight color={colors.primary} size={16} />
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Standard Success */}
-        {state === 'success' && (
-          <View style={styles.successBox}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <CheckCircle2 color="#34D399" size={24} />
-              <Text style={styles.successTitle}>Correct</Text>
-            </View>
-            <Text style={styles.successExp}>{explanation}</Text>
-          </View>
-        )}
-
         <View style={styles.qCard}>
-          <MathText style={styles.qPrompt}>{question.prompt}</MathText>
+          <MathText style={styles.qPrompt}>{currentQuestion.prompt}</MathText>
         </View>
 
         <View style={styles.optionsContainer}>
-          {question.options?.map((opt, idx) => {
+          {currentQuestion.options?.map((opt, idx) => {
             const isSelected = selectedOption === idx;
-            let bgColor = colors.surfaceLight;
-            let borderColor = 'transparent';
-            
-            if (isSelected) {
-              if (state === 'reading') {
-                bgColor = '#9B6FFF15';
-                borderColor = colors.primary;
-              } else if (state === 'evaluating') {
-                bgColor = '#9B6FFF15';
-                borderColor = colors.primary;
-              } else if (state === 'failed') {
-                bgColor = '#FF6B6B15';
-                borderColor = '#FF6B6B';
-              } else if (state === 'success' || state === 'success_first_try') {
-                bgColor = '#34D39915';
-                borderColor = '#34D399';
-              }
-            }
+            const bgColor = isSelected ? `${colors.hudjeeProgressStart}15` : colors.hudjeeSurfaceCard;
+            const borderColor = isSelected ? colors.hudjeeProgressStart : colors.hudjeeBorderSubtle;
 
             return (
-              <AnimatedButton
+              <TouchableOpacity
                 key={idx}
-                hapticType="light"
+                activeOpacity={0.7}
                 style={[
                   styles.optionBtn,
                   { backgroundColor: bgColor, borderColor, borderWidth: 1 }
                 ]}
-                onPress={() => handleSelectOption(idx)}
-                disabled={state === 'evaluating' || state === 'success' || state === 'success_first_try'}
+                onPress={() => setSelectedOption(idx)}
+                disabled={submitting}
               >
-                <View style={styles.optLetterBox}>
-                  <Text style={styles.optLetter}>{String.fromCharCode(65 + idx)}</Text>
+                <View style={[styles.optLetterBox, isSelected && { backgroundColor: `${colors.hudjeeProgressStart}30` }]}>
+                  <Text style={[styles.optLetter, isSelected && { color: colors.hudjeeProgressStart }]}>
+                    {String.fromCharCode(65 + idx)}
+                  </Text>
                 </View>
                 <View style={{ flex: 1 }}>
                   <MathText style={styles.optText}>{opt}</MathText>
                 </View>
-              </AnimatedButton>
+              </TouchableOpacity>
             );
           })}
         </View>
-
       </ScrollView>
 
       {/* Footer CTA */}
       <View style={styles.footer}>
-        {(state === 'reading' || state === 'failed' || state === 'evaluating') && (
-          <AnimatedButton 
-            hapticType="medium"
-            style={[styles.submitBtn, selectedOption === null && styles.submitBtnDisabled]}
-            disabled={selectedOption === null || state === 'evaluating'}
-            onPress={handleSubmit}
-          >
-            {state === 'evaluating' ? (
-              <ActivityIndicator color="#000" />
-            ) : (
-              <Text style={styles.submitBtnText}>{attempts > 0 ? 'Try Again' : 'Check Answer'}</Text>
-            )}
-          </AnimatedButton>
-        )}
-
-        {(state === 'success' || state === 'success_first_try') && (
-          <AnimatedButton 
-            hapticType="light"
-            style={styles.submitBtn}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.submitBtnText}>Back to Challenges</Text>
-          </AnimatedButton>
-        )}
+        <AnimatedButton 
+          hapticType="medium"
+          style={[styles.submitBtn, (selectedOption === null || submitting) && styles.submitBtnDisabled]}
+          disabled={selectedOption === null || submitting}
+          onPress={handleNext}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={styles.submitBtnText}>{isLastQuestion ? 'Finish' : 'Next'}</Text>
+          )}
+        </AnimatedButton>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  backBtn: { padding: 4, marginLeft: -4 },
-  headerTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  
-  scrollContent: { padding: 20, paddingBottom: 40 },
-  
-  successFirstTryBox: { backgroundColor: '#FF6B6B15', borderColor: '#FF6B6B50', borderWidth: 1, borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 24 },
-  sftEmoji: { fontSize: 48, marginBottom: 12 },
-  sftTitle: { color: '#FF6B6B', fontSize: 24, fontWeight: '800', marginBottom: 8 },
-  sftSub: { color: colors.textSecondary, fontSize: 15, textAlign: 'center' },
-
-  failedBox: { backgroundColor: '#FF6B6B10', borderColor: '#FF6B6B30', borderWidth: 1, borderRadius: 16, padding: 20, marginBottom: 24 },
-  failedTitle: { color: '#FF6B6B', fontSize: 18, fontWeight: '700' },
-  failedExp: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, marginBottom: 16 },
-  practiceNudgeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 16, backgroundColor: '#9B6FFF15', borderRadius: 8 },
-  practiceNudgeText: { color: colors.primary, fontWeight: '600', fontSize: 14 },
-
-  successBox: { backgroundColor: '#34D39910', borderColor: '#34D39930', borderWidth: 1, borderRadius: 16, padding: 20, marginBottom: 24 },
-  successTitle: { color: '#34D399', fontSize: 18, fontWeight: '700' },
-  successExp: { color: colors.textSecondary, fontSize: 15, lineHeight: 22 },
-
-  qCard: { marginBottom: 32 },
-  qPrompt: { color: colors.text, fontSize: 18, lineHeight: 28 },
-
-  optionsContainer: { gap: 12 },
-  optionBtn: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 12 },
-  optLetterBox: { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  optLetter: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
-  optText: { color: colors.text, fontSize: 16 },
-
-  footer: { padding: 20, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
-  submitBtn: { backgroundColor: colors.primary, paddingVertical: 18, borderRadius: 16, alignItems: 'center' },
-  submitBtnDisabled: { opacity: 0.5 },
-  submitBtnText: { color: '#000', fontSize: 18, fontWeight: '800' }
+  safeArea: { 
+    flex: 1, 
+    backgroundColor: colors.hudjeeBgBase 
+  },
+  progressBarContainer: {
+    width: '100%',
+  },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingVertical: 12 
+  },
+  backBtn: { 
+    padding: 4, 
+    marginLeft: -4 
+  },
+  headerTitle: { 
+    color: colors.hudjeeTextPrimary, 
+    ...typography.hudjee.headingMd
+  },
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  timerText: {
+    color: colors.hudjeeTextSecondary,
+    ...typography.hudjee.numericEmphasis
+  },
+  scrollContent: { 
+    padding: 20, 
+    paddingBottom: 40 
+  },
+  qCard: { 
+    marginBottom: 32 
+  },
+  qPrompt: { 
+    color: colors.hudjeeTextPrimary, 
+    ...typography.hudjee.headingMd,
+    lineHeight: 28,
+  },
+  optionsContainer: { 
+    gap: 12 
+  },
+  optionBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 16, 
+    borderRadius: 16 
+  },
+  optLetterBox: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 8, 
+    backgroundColor: colors.hudjeeSurfaceCardElevated, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 16 
+  },
+  optLetter: { 
+    color: colors.hudjeeTextSecondary, 
+    ...typography.hudjee.label,
+    fontFamily: typography.bold
+  },
+  optText: { 
+    color: colors.hudjeeTextPrimary, 
+    ...typography.hudjee.body
+  },
+  footer: { 
+    padding: 20, 
+    borderTopWidth: 1, 
+    borderTopColor: colors.hudjeeBorderSubtle, 
+    backgroundColor: colors.hudjeeBgBase 
+  },
+  submitBtn: { 
+    backgroundColor: colors.hudjeeProgressStart, 
+    paddingVertical: 16, 
+    borderRadius: 16, 
+    alignItems: 'center' 
+  },
+  submitBtnDisabled: { 
+    opacity: 0.5 
+  },
+  submitBtnText: { 
+    color: '#000', 
+    ...typography.hudjee.headingMd,
+    fontFamily: typography.extraBold
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  emptyText: {
+    color: colors.hudjeeTextSecondary,
+    ...typography.hudjee.body
+  }
 });

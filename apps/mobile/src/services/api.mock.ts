@@ -8,6 +8,7 @@ export interface Chapter {
   name: string;
   mastery_pct: number;
   status: ChapterStatus;
+  subject?: string;
 }
 
 export interface Question {
@@ -83,7 +84,7 @@ export interface ArenaSessionSummary {
   tier_changed: boolean;
 }
 
-// --- Social / Challenges Types ---
+// --- Social / Challenges Types (V1 – kept for backward compat) ---
 export interface Friend {
   friend_id: string;
   name: string;
@@ -111,6 +112,94 @@ export interface Challenge {
   sent_at: string;
 }
 
+// ============================================================================
+// CHALLENGES V2 — Full Social Layer Types
+// ============================================================================
+
+export type ChallengeScope = 'chapter' | 'mixed';
+export type ChallengeStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'expired' | 'cancelled';
+export type ChallengeResult = 'sender_win' | 'recipient_win' | 'tie' | 'expired' | null;
+
+export interface FriendV2 {
+  friend_id: string;
+  name: string;
+  avatar_url: string;
+  arena_rating: number;
+  streak_length: number;
+  daily_xp: number;
+  last_active: string;
+  invite_code: string;
+}
+
+export interface ChallengeV2 {
+  challenge_id: string;
+  sender: FriendV2;
+  recipient: FriendV2;
+  scope: ChallengeScope;
+  chapter_name: string | null;  // null if mixed
+  question_count: number;       // 5, 10, or 15
+  window_hours: number;         // 24, 48, or 72
+  status: ChallengeStatus;
+  result: ChallengeResult;
+  sender_score: number | null;      // X out of question_count
+  recipient_score: number | null;
+  sender_time_ms: number | null;
+  recipient_time_ms: number | null;
+  sender_completed: boolean;
+  recipient_completed: boolean;
+  sender_reaction: string | null;   // emoji
+  recipient_reaction: string | null;
+  questions: Question[];
+  created_at: string;
+  expires_at: string;
+}
+
+export interface ChallengeAnswer {
+  question_id: string;
+  selected_answer: number;
+  is_correct: boolean;
+  time_taken_ms: number;
+}
+
+export interface ChallengeSubmitResult {
+  score: number;
+  total: number;
+  total_time_ms: number;
+  result: ChallengeResult;
+  opponent_score: number | null;
+  opponent_time_ms: number | null;
+}
+
+export interface StreakData {
+  current_streak: number;
+  longest_streak: number;
+  freezes_available: number;
+  is_at_risk: boolean;
+  is_frozen_today: boolean;
+  last_activity_date: string | null;
+  milestones_reached: number[];
+  // Calendar data for last 30 days
+  calendar: StreakDay[];
+}
+
+export interface StreakDay {
+  date: string;       // YYYY-MM-DD
+  had_activity: boolean;
+  freeze_used: boolean;
+}
+
+export interface LeaderboardEntry {
+  user_id: string;
+  name: string;
+  avatar_url: string;
+  arena_rating: number;
+  streak_length: number;
+  daily_xp: number;
+  rank: number;
+  rank_delta: number;  // positive = moved up, negative = moved down
+  is_self: boolean;
+}
+
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 
 // --- MOCK DATABASE ---
@@ -124,7 +213,9 @@ const DB = {
   questions: {
     'q1': { question_id: 'q1', concept_id: 'concept1', type: 'mcq_single' as QuestionType, prompt: 'A ballet dancer spins with her arms outstretched. When she pulls her arms in, her angular velocity increases because:', options: ['Her moment of inertia decreases', 'Her angular momentum increases', 'Her moment of inertia increases', 'Torque is applied by her arms'], correctIndex: 0, solutionSteps: ['By the law of conservation of angular momentum (L = Iω), if no external torque acts on the system, L remains constant.', 'Pulling arms in decreases the moment of inertia (I), so angular velocity (ω) must increase to keep L constant.'], misconceptionMap: { 1: 'Angular momentum is conserved, it does not increase.', 3: 'No external torque is applied; it is an internal force.' } },
     'q2': { question_id: 'q2', concept_id: 'concept1', type: 'mcq_single' as QuestionType, prompt: 'A solid disk of mass $M$ and radius $R$ is spinning with angular velocity $\\omega$. A piece of clay of mass $m$ is dropped on the edge. What is the new angular velocity?', options: ['$\\omega \\frac{M}{M + 2m}$', '$\\omega \\frac{M}{M + m}$', '$\\omega \\frac{M + 2m}{M}$', '$\\omega$'], correctIndex: 0, solutionSteps: ['Initial L = I_disk * ω = (1/2 M R^2) * ω.', 'Final I = I_disk + I_clay = (1/2 M R^2) + (m R^2).', 'Final L = Final I * ω_new.', 'Equating them gives ω_new = ω * (M / (M + 2m)).'], misconceptionMap: {} },
-    'q3': { question_id: 'q3', concept_id: 'concept2', type: 'mcq_single' as QuestionType, prompt: 'A star of radius $R$ collapses to radius $R/2$ while conserving mass. The ratio of its new rotational kinetic energy to its initial rotational kinetic energy is:', options: ['4', '2', '1', '1/4'], correctIndex: 0, solutionSteps: ['L is conserved.', 'I_initial = 2/5 M R^2.', 'I_final = 2/5 M (R/2)^2 = I_initial / 4.', 'Rotational KE = L^2 / 2I.', 'Since I becomes 1/4th, KE becomes 4 times the initial.'], misconceptionMap: {} }
+    'q3': { question_id: 'q3', concept_id: 'concept2', type: 'mcq_single' as QuestionType, prompt: 'A star of radius $R$ collapses to radius $R/2$ while conserving mass. The ratio of its new rotational kinetic energy to its initial rotational kinetic energy is:', options: ['4', '2', '1', '1/4'], correctIndex: 0, solutionSteps: ['L is conserved.', 'I_initial = 2/5 M R^2.', 'I_final = 2/5 M (R/2)^2 = I_initial / 4.', 'Rotational KE = L^2 / 2I.', 'Since I becomes 1/4th, KE becomes 4 times the initial.'], misconceptionMap: {} },
+    'q4': { question_id: 'q4', concept_id: 'concept1', type: 'mcq_single' as QuestionType, prompt: 'A uniform rod of length L is free to rotate about one end. If released from horizontal position, the angular velocity at the lowest point is:', options: ['$\\sqrt{3g/L}$', '$\\sqrt{2g/L}$', '$\\sqrt{g/L}$', '$\\sqrt{6g/L}$'], correctIndex: 0, solutionSteps: ['Using energy conservation, mgh = ½Iω².', 'For rod about end, I = mL²/3, h = L/2.', 'mg(L/2) = ½(mL²/3)ω².', 'ω = √(3g/L).'], misconceptionMap: {} },
+    'q5': { question_id: 'q5', concept_id: 'concept2', type: 'mcq_single' as QuestionType, prompt: 'Two identical spheres are connected by a massless rod. The moment of inertia about the center of the rod is:', options: ['2mr²', 'mr²', '4mr²', 'mr²/2'], correctIndex: 0, solutionSteps: ['Each sphere treated as point mass at distance r from center.', 'I_total = mr² + mr² = 2mr².'], misconceptionMap: {} },
   } as Record<string, any>
 };
 
@@ -133,6 +224,166 @@ const sessions: Record<string, { currentQIndex: number, qIds: string[], stats: {
 
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 const MOCK_QUESTIONS = Object.values(DB.questions) as Question[];
+
+// ── Mock Friends V2 ──
+const MOCK_FRIENDS_V2: FriendV2[] = [
+  { friend_id: 'f1', name: 'Rahul S.', avatar_url: 'https://i.pravatar.cc/150?u=f1', arena_rating: 1520, streak_length: 14, daily_xp: 340, last_active: new Date(Date.now() - 3600000).toISOString(), invite_code: 'RSH42K' },
+  { friend_id: 'f2', name: 'Priya M.', avatar_url: 'https://i.pravatar.cc/150?u=f2', arena_rating: 1380, streak_length: 7, daily_xp: 220, last_active: new Date(Date.now() - 7200000).toISOString(), invite_code: 'PRM91X' },
+  { friend_id: 'f3', name: 'Amit K.', avatar_url: 'https://i.pravatar.cc/150?u=f3', arena_rating: 1650, streak_length: 31, daily_xp: 510, last_active: new Date(Date.now() - 1800000).toISOString(), invite_code: 'AMK77Q' },
+  { friend_id: 'f4', name: 'Sneha P.', avatar_url: 'https://i.pravatar.cc/150?u=f4', arena_rating: 1200, streak_length: 3, daily_xp: 150, last_active: new Date(Date.now() - 86400000).toISOString(), invite_code: 'SNP33W' },
+  { friend_id: 'f5', name: 'Vikram R.', avatar_url: 'https://i.pravatar.cc/150?u=f5', arena_rating: 1480, streak_length: 22, daily_xp: 410, last_active: new Date(Date.now() - 600000).toISOString(), invite_code: 'VKR08L' },
+];
+
+const MOCK_SELF: FriendV2 = {
+  friend_id: 'self', name: 'You', avatar_url: '', arena_rating: 1420, streak_length: 12, daily_xp: 280, last_active: new Date().toISOString(), invite_code: 'JEE24A',
+};
+
+// ── Build mock challenges ──
+const buildMockChallenges = (): ChallengeV2[] => {
+  const now = Date.now();
+  return [
+    // Incoming pending
+    {
+      challenge_id: 'chal_1',
+      sender: MOCK_FRIENDS_V2[2], // Amit
+      recipient: MOCK_SELF,
+      scope: 'chapter',
+      chapter_name: 'Rotational Dynamics',
+      question_count: 10,
+      window_hours: 48,
+      status: 'pending',
+      result: null,
+      sender_score: null,
+      recipient_score: null,
+      sender_time_ms: null,
+      recipient_time_ms: null,
+      sender_completed: false,
+      recipient_completed: false,
+      sender_reaction: null,
+      recipient_reaction: null,
+      questions: MOCK_QUESTIONS.slice(0, 3),
+      created_at: new Date(now - 7200000).toISOString(),  // 2h ago
+      expires_at: new Date(now + 48 * 3600000).toISOString(),
+    },
+    // Accepted, awaiting your move
+    {
+      challenge_id: 'chal_2',
+      sender: MOCK_FRIENDS_V2[0], // Rahul
+      recipient: MOCK_SELF,
+      scope: 'chapter',
+      chapter_name: "Newton's Laws of Motion",
+      question_count: 5,
+      window_hours: 24,
+      status: 'in_progress',
+      result: null,
+      sender_score: 4,
+      recipient_score: null,
+      sender_time_ms: 245000,
+      recipient_time_ms: null,
+      sender_completed: true,
+      recipient_completed: false,
+      sender_reaction: null,
+      recipient_reaction: null,
+      questions: MOCK_QUESTIONS.slice(0, 5),
+      created_at: new Date(now - 18 * 3600000).toISOString(),
+      expires_at: new Date(now + 6 * 3600000).toISOString(),
+    },
+    // Sent by you, awaiting opponent
+    {
+      challenge_id: 'chal_3',
+      sender: MOCK_SELF,
+      recipient: MOCK_FRIENDS_V2[1], // Priya
+      scope: 'mixed',
+      chapter_name: null,
+      question_count: 10,
+      window_hours: 48,
+      status: 'pending',
+      result: null,
+      sender_score: null,
+      recipient_score: null,
+      sender_time_ms: null,
+      recipient_time_ms: null,
+      sender_completed: false,
+      recipient_completed: false,
+      sender_reaction: null,
+      recipient_reaction: null,
+      questions: MOCK_QUESTIONS.slice(0, 3),
+      created_at: new Date(now - 3600000).toISOString(),
+      expires_at: new Date(now + 47 * 3600000).toISOString(),
+    },
+    // Completed — you won
+    {
+      challenge_id: 'chal_4',
+      sender: MOCK_SELF,
+      recipient: MOCK_FRIENDS_V2[0], // Rahul
+      scope: 'chapter',
+      chapter_name: 'Chemical Bonding',
+      question_count: 10,
+      window_hours: 48,
+      status: 'completed',
+      result: 'sender_win',
+      sender_score: 9,
+      recipient_score: 7,
+      sender_time_ms: 252000,
+      recipient_time_ms: 303000,
+      sender_completed: true,
+      recipient_completed: true,
+      sender_reaction: '🔥',
+      recipient_reaction: '👏',
+      questions: MOCK_QUESTIONS.slice(0, 3),
+      created_at: new Date(now - 3 * 86400000).toISOString(),
+      expires_at: new Date(now - 1 * 86400000).toISOString(),
+    },
+    // Completed — you lost
+    {
+      challenge_id: 'chal_5',
+      sender: MOCK_FRIENDS_V2[2], // Amit
+      recipient: MOCK_SELF,
+      scope: 'chapter',
+      chapter_name: 'Rotational Dynamics',
+      question_count: 5,
+      window_hours: 24,
+      status: 'completed',
+      result: 'sender_win',
+      sender_score: 5,
+      recipient_score: 3,
+      sender_time_ms: 180000,
+      recipient_time_ms: 210000,
+      sender_completed: true,
+      recipient_completed: true,
+      sender_reaction: '💪',
+      recipient_reaction: null,
+      questions: MOCK_QUESTIONS.slice(0, 5),
+      created_at: new Date(now - 5 * 86400000).toISOString(),
+      expires_at: new Date(now - 4 * 86400000).toISOString(),
+    },
+  ];
+};
+
+// ── Streak calendar generation ──
+const buildStreakCalendar = (): StreakDay[] => {
+  const days: StreakDay[] = [];
+  const now = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    if (i === 0) {
+      // today — no activity yet (at-risk simulation)
+      days.push({ date: dateStr, had_activity: false, freeze_used: false });
+    } else if (i === 15) {
+      // freeze day
+      days.push({ date: dateStr, had_activity: false, freeze_used: true });
+    } else if (i > 12) {
+      // no streak
+      days.push({ date: dateStr, had_activity: i % 2 === 0, freeze_used: false });
+    } else {
+      // current streak run
+      days.push({ date: dateStr, had_activity: true, freeze_used: false });
+    }
+  }
+  return days;
+};
 
 export class MockEngineApi {
   
@@ -350,7 +601,7 @@ export class MockEngineApi {
   };
 
   // ============================================================================
-  // SOCIAL / CHALLENGES ENDPOINTS
+  // SOCIAL / CHALLENGES V1 ENDPOINTS (kept for compat)
   // ============================================================================
 
   static getFriends = async (): Promise<any[]> => {
@@ -400,8 +651,7 @@ export class MockEngineApi {
 
   static getChallengeQuestion = async (challengeId: string): Promise<Question> => {
     await delay(400);
-    // Return a hardcoded mock question for challenges
-    return MOCK_QUESTIONS[2]; // Using 'q3' as the challenge question
+    return MOCK_QUESTIONS[2];
   };
 
   static submitChallengeAnswer = async (challengeId: string, selectedIndex: number, firstTry: boolean): Promise<{ correct: boolean, short_explanation: string }> => {
@@ -412,5 +662,188 @@ export class MockEngineApi {
       correct: isCorrect,
       short_explanation: isCorrect ? 'Great job! You solved it.' : 'The moment of inertia decreases, so rotational KE must increase.'
     };
+  };
+
+  // ============================================================================
+  // CHALLENGES V2 ENDPOINTS
+  // ============================================================================
+
+  static getFriendsV2 = async (): Promise<FriendV2[]> => {
+    await delay(400);
+    return MOCK_FRIENDS_V2;
+  };
+
+  static getStreakData = async (): Promise<StreakData> => {
+    await delay(300);
+    const hour = new Date().getHours();
+    return {
+      current_streak: 12,
+      longest_streak: 23,
+      freezes_available: 1,
+      is_at_risk: hour >= 20, // at-risk after 8 PM
+      is_frozen_today: false,
+      last_activity_date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+      milestones_reached: [7],
+      calendar: buildStreakCalendar(),
+    };
+  };
+
+  static getLeaderboard = async (sort: 'rating' | 'streak', period: 'today' | 'all_time'): Promise<LeaderboardEntry[]> => {
+    await delay(500);
+    const entries: LeaderboardEntry[] = MOCK_FRIENDS_V2.map((f, i) => ({
+      user_id: f.friend_id,
+      name: f.name,
+      avatar_url: f.avatar_url,
+      arena_rating: f.arena_rating,
+      streak_length: f.streak_length,
+      daily_xp: f.daily_xp,
+      rank: 0,
+      rank_delta: 0,
+      is_self: false,
+    }));
+    // Add self
+    entries.push({
+      user_id: 'self',
+      name: 'You',
+      avatar_url: '',
+      arena_rating: 1420,
+      streak_length: 12,
+      daily_xp: 280,
+      rank: 0,
+      rank_delta: 0,
+      is_self: true,
+    });
+    // Sort
+    if (sort === 'rating') {
+      entries.sort((a, b) => b.arena_rating - a.arena_rating);
+    } else {
+      entries.sort((a, b) => b.streak_length - a.streak_length);
+    }
+    // Assign ranks and deltas
+    entries.forEach((e, i) => {
+      e.rank = i + 1;
+      e.rank_delta = e.is_self ? 2 : (i % 3 === 0 ? 1 : i % 3 === 1 ? -1 : 0);
+    });
+    return entries;
+  };
+
+  static getChallengesV2 = async (filter: 'active' | 'completed' | 'all'): Promise<ChallengeV2[]> => {
+    await delay(500);
+    const all = buildMockChallenges();
+    if (filter === 'active') return all.filter(c => c.status !== 'completed' && c.status !== 'expired');
+    if (filter === 'completed') return all.filter(c => c.status === 'completed' || c.status === 'expired');
+    return all;
+  };
+
+  static getChallengeDetail = async (challengeId: string): Promise<ChallengeV2 | null> => {
+    await delay(400);
+    const all = buildMockChallenges();
+    return all.find(c => c.challenge_id === challengeId) || null;
+  };
+
+  static createChallengeV2 = async (
+    friendId: string,
+    scope: ChallengeScope,
+    chapterId: string | null,
+    questionCount: number,
+    windowHours: number
+  ): Promise<ChallengeV2> => {
+    await delay(800);
+    const friend = MOCK_FRIENDS_V2.find(f => f.friend_id === friendId) || MOCK_FRIENDS_V2[0];
+    return {
+      challenge_id: 'chal_new_' + Date.now(),
+      sender: MOCK_SELF,
+      recipient: friend,
+      scope,
+      chapter_name: scope === 'chapter' ? "Newton's Laws of Motion" : null,
+      question_count: questionCount,
+      window_hours: windowHours,
+      status: 'pending',
+      result: null,
+      sender_score: null,
+      recipient_score: null,
+      sender_time_ms: null,
+      recipient_time_ms: null,
+      sender_completed: false,
+      recipient_completed: false,
+      sender_reaction: null,
+      recipient_reaction: null,
+      questions: MOCK_QUESTIONS.slice(0, Math.min(questionCount, MOCK_QUESTIONS.length)),
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + windowHours * 3600000).toISOString(),
+    };
+  };
+
+  static acceptChallengeV2 = async (challengeId: string): Promise<void> => {
+    await delay(400);
+  };
+
+  static declineChallengeV2 = async (challengeId: string): Promise<void> => {
+    await delay(400);
+  };
+
+  static submitChallengeAnswersV2 = async (
+    challengeId: string,
+    answers: ChallengeAnswer[]
+  ): Promise<ChallengeSubmitResult> => {
+    await delay(600);
+    const correct = answers.filter(a => a.is_correct).length;
+    const totalTime = answers.reduce((sum, a) => sum + a.time_taken_ms, 0);
+    return {
+      score: correct,
+      total: answers.length,
+      total_time_ms: totalTime,
+      result: correct >= 3 ? 'sender_win' : 'recipient_win',
+      opponent_score: Math.floor(Math.random() * answers.length),
+      opponent_time_ms: Math.floor(Math.random() * 300000) + 120000,
+    };
+  };
+
+  static reactToChallenge = async (challengeId: string, emoji: string): Promise<void> => {
+    await delay(200);
+  };
+
+  static getMyInviteCode = async (): Promise<string> => {
+    await delay(200);
+    return 'JEE24A';
+  };
+
+  static addFriendByCode = async (code: string): Promise<FriendV2 | null> => {
+    await delay(600);
+    const match = MOCK_FRIENDS_V2.find(f => f.invite_code.toUpperCase() === code.toUpperCase());
+    return match || null;
+  };
+
+  static blockFriend = async (friendId: string): Promise<void> => {
+    await delay(300);
+  };
+
+  static removeFriend = async (friendId: string): Promise<void> => {
+    await delay(300);
+  };
+
+  static getFriendRequestsV2 = async (): Promise<{ incoming: FriendV2[]; outgoing: FriendV2[] }> => {
+    await delay(400);
+    return {
+      incoming: [MOCK_FRIENDS_V2[3]], // Sneha
+      outgoing: [],
+    };
+  };
+
+  static respondFriendRequestV2 = async (friendId: string, accept: boolean): Promise<void> => {
+    await delay(400);
+  };
+
+  static getAllChaptersFlat = async (): Promise<Chapter[]> => {
+    await delay(300);
+    return [
+      { chapter_id: 'c1', name: "Newton's Laws of Motion", mastery_pct: 32, status: 'in_progress', subject: 'Physics' },
+      { chapter_id: 'c2', name: "Work, Power & Energy", mastery_pct: 0, status: 'not_started', subject: 'Physics' },
+      { chapter_id: 'c3', name: "Rotational Dynamics", mastery_pct: 85, status: 'needs_revisit', subject: 'Physics' },
+      { chapter_id: 'c4', name: "Chemical Bonding", mastery_pct: 100, status: 'mastered', subject: 'Chemistry' },
+      { chapter_id: 'c5', name: "Thermodynamics", mastery_pct: 60, status: 'in_progress', subject: 'Chemistry' },
+      { chapter_id: 'c6', name: "Calculus", mastery_pct: 75, status: 'in_progress', subject: 'Maths' },
+      { chapter_id: 'c7', name: "Algebra", mastery_pct: 45, status: 'in_progress', subject: 'Maths' },
+    ];
   };
 }

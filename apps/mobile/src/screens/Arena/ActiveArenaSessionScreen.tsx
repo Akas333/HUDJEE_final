@@ -93,7 +93,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
       const r = await EngineApi.getArenaRating();
       setRating(r.rating);
 
-      const res = await EngineApi.startArenaSession(chapterIds, timedMode);
+      const res = await EngineApi.startArenaSession();
       setSessionId(res.session_id);
       setCurrentQ(res.first_question);
       setStatus('answering');
@@ -127,7 +127,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
     setStatus('loading');
     
     // We pass a dummy index (-1) which will naturally be incorrect
-    const res = await EngineApi.submitArenaAnswer(sessionId, currentQ.question_id, -1, 60000);
+    const res = await EngineApi.submitArenaAnswer();
     
     setAnswerData(res);
     setRating(res.new_rating);
@@ -143,7 +143,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
     setStatus('loading');
     
     const timeTakenMs = (60 - timeLeft) * 1000;
-    const res = await EngineApi.submitArenaAnswer(sessionId, currentQ.question_id, selectedOption, timeTakenMs);
+    const res = await EngineApi.submitArenaAnswer();
     
     setAnswerData(res);
     setRating(res.new_rating);
@@ -165,7 +165,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
     
     stopTimer();
     setStatus('loading');
-    const res = await EngineApi.skipArenaQuestion(sessionId, currentQ.question_id);
+    const res = await EngineApi.skipArenaQuestion();
     handleAdvance(res.next_question);
   };
 
@@ -185,7 +185,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
     stopTimer();
     if (sessionId) {
       setStatus('loading');
-      const summary = await EngineApi.endArenaSession(sessionId);
+      const summary = await EngineApi.endArenaSession();
       setSummaryData(summary);
       setStatus('summary');
     } else {

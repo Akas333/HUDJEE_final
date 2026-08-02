@@ -1,62 +1,34 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client for Server-Side Use
-// In production, use environment variables!
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key_for_now'
-const supabase = createClient(supabaseUrl, supabaseKey)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-export async function POST(request: Request) {
-  try {
-    const data = await request.json()
-    
-    // Validate required fields
-    if (!data.question_body || !data.subject) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-    }
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const subject = searchParams.get('subject');
+  const chapter_id = searchParams.get('chapter_id');
+  const difficulty = searchParams.get('difficulty');
+  const search = searchParams.get('search');
 
-    // Insert into Supabase
-    const { data: insertedQuestion, error } = await supabase
-      .from('questions')
-      .insert([
-        {
-          format: data.format,
-          subject: data.subject,
-          chapter: data.chapter,
-          topic: data.topic,
-          difficulty: data.difficulty,
-          source_type: data.source_type,
-          question_body: data.question_body,
-          correct_answer: data.correct_answer,
-          solution: data.solution,
-          published: true // auto-publish for now
-        }
-      ])
-      .select()
-      .single()
+  let query = supabase.from('questions').select('*, chapters(name), topics(name)').order('created_at', { ascending: false });
 
-    if (error) throw error
+  if (subject) query = query.eq('subject', subject);
+  if (chapter_id) query = query.eq('chapter_id', chapter_id);
+  if (difficulty) query = query.eq('difficulty', difficulty);
+  if (search) query = query.ilike('question_body', `%${search}%`);
 
-    return NextResponse.json({ success: true, data: insertedQuestion }, { status: 201 })
-    
-  } catch (error: any) {
-    console.error('Error saving question:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }
 
-export async function GET() {
-  try {
-    const { data, error } = await supabase
-      .from('questions')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-
-    return NextResponse.json({ data }, { status: 200 })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+export async function POST(request: Request) {
+  const body = await request.json();
+  const { error, data } = await supabase.from('questions').insert(body).select().single();
+  
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
 }

@@ -1,7 +1,13 @@
 import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Pencil, Box, User, BookOpen } from 'lucide-react-native';
-import Svg, { Path, Polyline, Rect } from 'react-native-svg';
+import { Pencil, Swords, User, BookOpen } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
+
+import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
+
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Import Navigators
 import DashboardScreen from '../screens/DashboardScreen';
@@ -12,14 +18,12 @@ import ProfileNavigator from './ProfileNavigator';
 
 const Tab = createBottomTabNavigator();
 
-// Custom Home Icon (No door, matched to design)
 const HomeIcon = ({ color, size, strokeWidth }: { color: string; size: number; strokeWidth: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
     <Path d="M3 10L12 3l9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V10z" />
   </Svg>
 );
 
-// Custom Book Icon (Pointed spine, matched to design)
 const BookIcon = ({ color, size, strokeWidth }: { color: string; size: number; strokeWidth: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
     <Path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
@@ -27,59 +31,164 @@ const BookIcon = ({ color, size, strokeWidth }: { color: string; size: number; s
   </Svg>
 );
 
+import Animated, { LinearTransition, FadeIn, FadeOut } from 'react-native-reanimated';
+
+const TabIcon = ({ focused, icon: IconComp, label }: { focused: boolean, icon: any, label: string }) => {
+  return (
+    <Animated.View 
+      layout={LinearTransition.springify().damping(16).stiffness(150)}
+      style={[
+        styles.tabIconContainer,
+        focused && styles.tabIconContainerFocused
+      ]}
+    >
+      <IconComp 
+        color={focused ? "#A78BFA" : colors.hudjeeTextSecondary} 
+        size={focused ? 20 : 24} 
+        strokeWidth={focused ? 2.5 : 2} 
+      />
+      {focused && (
+        <Animated.Text 
+          entering={FadeIn.duration(150)} 
+          exiting={FadeOut.duration(100)}
+          style={styles.tabLabelFocused} 
+          numberOfLines={1}
+        >
+          {label}
+        </Animated.Text>
+      )}
+    </Animated.View>
+  );
+};
+
+const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
+
+function CustomTabBar({ state, descriptors, navigation, insets }: any) {
+  return (
+    <View style={[styles.tabBar, { height: 60 + (insets.bottom > 0 ? insets.bottom : 12), paddingBottom: insets.bottom > 0 ? insets.bottom : 12 }]}>
+      {state.routes.map((route: any, index: number) => {
+        const { options } = descriptors[route.key];
+        const isFocused = state.index === index;
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        };
+
+        return (
+          <AnimatedTouchableOpacity
+            key={index}
+            accessibilityRole="button"
+            accessibilityState={isFocused ? { selected: true } : {}}
+            accessibilityLabel={options.tabBarAccessibilityLabel}
+            testID={options.tabBarTestID}
+            onPress={onPress}
+            activeOpacity={0.8}
+            style={isFocused ? styles.customTabItemActive : styles.customTabItemInactive}
+            layout={LinearTransition.springify().damping(16).stiffness(150)}
+          >
+            {options.tabBarIcon ? options.tabBarIcon({ focused: isFocused }) : null}
+          </AnimatedTouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function BottomTabNavigator() {
+  const insets = useSafeAreaInsets();
+  
   return (
     <Tab.Navigator
+      tabBar={(props) => <CustomTabBar {...props} insets={insets} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#111111',
-          borderTopColor: '#262626',
-          borderTopWidth: 1,
-          height: 85,
-          paddingBottom: 28,
-          paddingTop: 16,
-        },
-        tabBarActiveTintColor: '#FFFFFF',
-        tabBarInactiveTintColor: '#6B7280',
-        tabBarShowLabel: false,
       }}
     >
       <Tab.Screen 
         name="Dashboard" 
         component={DashboardScreen} 
         options={{
-          tabBarIcon: ({ color, size, focused }) => <HomeIcon color={color} size={28} strokeWidth={focused ? 2.5 : 2} />
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={HomeIcon} label="Home" />
         }}
       />
       <Tab.Screen 
         name="Practice" 
         component={PracticeNavigator} 
         options={{
-          tabBarIcon: ({ color, size, focused }) => <BookIcon color={color} size={26} strokeWidth={focused ? 2.5 : 2} />
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={BookIcon} label="Practice" />
         }}
       />
       <Tab.Screen 
         name="Arena" 
         component={ArenaNavigator}
         options={{
-          tabBarIcon: ({ color, size, focused }) => <Pencil color={color} size={26} strokeWidth={focused ? 2.5 : 2} />
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={Pencil} label="Arena" />
         }}
       />
       <Tab.Screen 
         name="Challenges" 
         component={SocialNavigator}
         options={{
-          tabBarIcon: ({ color, size, focused }) => <Box color={color} size={26} strokeWidth={focused ? 2.5 : 2} />
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={Swords} label="Social" />
         }}
       />
       <Tab.Screen 
         name="Profile" 
         component={ProfileNavigator}
         options={{
-          tabBarIcon: ({ color, size, focused }) => <User color={color} size={26} strokeWidth={focused ? 2.5 : 2} />
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={User} label="Profile" />
         }}
       />
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: colors.hudjeeBgBase,
+    borderTopWidth: 1,
+    borderTopColor: colors.hudjeeSurfaceCardElevated,
+    paddingTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  customTabItemActive: {
+    flex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  customTabItemInactive: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    minWidth: 48,
+  },
+  tabIconContainerFocused: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(167, 139, 250, 0.15)',
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    gap: 8,
+  },
+  tabLabelFocused: {
+    fontFamily: typography.hudjee.headingMd.fontFamily,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#A78BFA',
+  }
+});

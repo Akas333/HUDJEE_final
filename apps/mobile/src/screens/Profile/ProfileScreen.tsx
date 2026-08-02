@@ -1,8 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Settings, BookOpen, ChevronRight, Trophy, Flame, Target } from 'lucide-react-native';
 import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { StatTile } from '../../components/StatTile';
 
 export default function ProfileScreen({ navigation }: any) {
   return (
@@ -10,14 +12,14 @@ export default function ProfileScreen({ navigation }: any) {
       <ScrollView style={styles.container} contentContainerStyle={styles.contentPadding}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity style={styles.iconButton}>
-            <Settings color={colors.textSecondary} size={22} />
+          <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('SettingsStack')}>
+            <Settings color={colors.hudjeeTextPrimary} size={24} />
           </TouchableOpacity>
         </View>
 
         {/* User Card */}
         <View style={styles.userCard}>
-          <View style={styles.avatarPlaceholder}>
+          <View style={styles.avatarContainer}>
             <Text style={styles.avatarText}>A</Text>
           </View>
           <View style={styles.userInfo}>
@@ -28,21 +30,21 @@ export default function ProfileScreen({ navigation }: any) {
 
         {/* Quick Stats */}
         <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <Flame color="#E8B84B" size={24} />
-            <Text style={styles.statValue}>12</Text>
-            <Text style={styles.statLabel}>Day Streak</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Target color="#34D399" size={24} />
-            <Text style={styles.statValue}>68%</Text>
-            <Text style={styles.statLabel}>Accuracy</Text>
-          </View>
-          <View style={styles.statBox}>
-            <Trophy color="#9B6FFF" size={24} />
-            <Text style={styles.statValue}>1450</Text>
-            <Text style={styles.statLabel}>Arena Rating</Text>
-          </View>
+          <StatTile 
+            label="Day Streak"
+            value="12"
+            icon={<Flame color="#E8B84B" size={24} />}
+          />
+          <StatTile 
+            label="Accuracy"
+            value="68%"
+            icon={<Target color="#34D399" size={24} />}
+          />
+          <StatTile 
+            label="Arena Rating"
+            value="1450"
+            icon={<Trophy color="#9B6FFF" size={24} />}
+          />
         </View>
 
         {/* Actions */}
@@ -53,14 +55,14 @@ export default function ProfileScreen({ navigation }: any) {
           activeOpacity={0.8}
           onPress={() => navigation.navigate('MistakeNotebookScreen')}
         >
-          <View style={[styles.actionIcon, { backgroundColor: '#9B6FFF20' }]}>
+          <View style={styles.actionIcon}>
             <BookOpen color="#9B6FFF" size={24} />
           </View>
           <View style={styles.actionInfo}>
             <Text style={styles.actionTitle}>Mistake Notebook</Text>
             <Text style={styles.actionSub}>Review and practice deferred concepts</Text>
           </View>
-          <ChevronRight color={colors.textSecondary} size={20} />
+          <ChevronRight color={colors.hudjeeTextSecondary} size={20} />
         </TouchableOpacity>
         
       </ScrollView>
@@ -69,31 +71,112 @@ export default function ProfileScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  container: { flex: 1 },
-  contentPadding: { padding: 16, paddingBottom: 40 },
+  safeArea: { 
+    flex: 1, 
+    backgroundColor: colors.hudjeeBgBase 
+  },
+  container: { 
+    flex: 1 
+  },
+  contentPadding: { 
+    padding: 16, 
+    paddingBottom: 40 
+  },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    marginBottom: 24 
+  },
+  headerTitle: { 
+    ...typography.hudjee.headingLg,
+    color: colors.hudjeeTextPrimary,
+  },
+  iconButton: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    backgroundColor: colors.hudjeeSurfaceCardElevated, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
   
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  headerTitle: { color: colors.text, fontSize: 24, fontWeight: '700' },
-  iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, justifyContent: 'center', alignItems: 'center' },
+  userCard: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: colors.hudjeeSurfaceCard, 
+    padding: 20, 
+    borderRadius: 24, 
+    marginBottom: 24, 
+  },
+  avatarContainer: { 
+    width: 80, 
+    height: 80, 
+    borderRadius: 40, 
+    backgroundColor: colors.hudjeeSurfaceCardElevated, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 16 
+  },
+  avatarText: { 
+    ...typography.hudjee.display,
+    color: colors.hudjeeTextPrimary, 
+  },
+  userInfo: { 
+    flex: 1 
+  },
+  userName: { 
+    ...typography.hudjee.headingLg,
+    color: colors.hudjeeTextPrimary, 
+    marginBottom: 4 
+  },
+  userHandle: { 
+    ...typography.hudjee.caption,
+    color: colors.hudjeeTextSecondary, 
+  },
   
-  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.border },
-  avatarPlaceholder: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.primaryGradientStart, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  avatarText: { color: '#fff', fontSize: 28, fontWeight: '700' },
-  userInfo: { flex: 1 },
-  userName: { color: colors.text, fontSize: 20, fontWeight: '700', marginBottom: 4 },
-  userHandle: { color: colors.textSecondary, fontSize: 14 },
+  statsRow: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap',
+    gap: 12, 
+    marginBottom: 32,
+    justifyContent: 'space-between',
+  },
   
-  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 32 },
-  statBox: { flex: 1, backgroundColor: colors.surface, padding: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
-  statValue: { color: colors.text, fontSize: 20, fontWeight: '700', marginTop: 8, marginBottom: 4 },
-  statLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '500' },
+  sectionTitle: { 
+    ...typography.hudjee.headingMd,
+    color: colors.hudjeeTextPrimary,
+    marginBottom: 16 
+  },
   
-  sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 16 },
-  
-  actionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
-  actionIcon: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  actionInfo: { flex: 1 },
-  actionTitle: { color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 4 },
-  actionSub: { color: colors.textSecondary, fontSize: 13 },
+  actionCard: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: colors.hudjeeSurfaceCard, 
+    padding: 16, 
+    borderRadius: 20, 
+    marginBottom: 12, 
+  },
+  actionIcon: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 24, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 16,
+    backgroundColor: '#9B6FFF20'
+  },
+  actionInfo: { 
+    flex: 1 
+  },
+  actionTitle: { 
+    ...typography.hudjee.headingMd,
+    color: colors.hudjeeTextPrimary,
+    fontSize: 16,
+    marginBottom: 2 
+  },
+  actionSub: { 
+    ...typography.hudjee.caption,
+    color: colors.hudjeeTextSecondary,
+  },
 });
