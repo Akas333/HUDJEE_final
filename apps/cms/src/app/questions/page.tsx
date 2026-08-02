@@ -14,7 +14,12 @@ export default function QuestionsPage() {
   const fetchQuestions = async () => {
     const res = await fetch(`/api/questions?search=${search}`);
     const data = await res.json();
-    setQuestions(data || []);
+    if (Array.isArray(data)) {
+      setQuestions(data);
+    } else {
+      console.error(data.error || 'Failed to fetch questions');
+      setQuestions([]);
+    }
   };
 
   const deleteQuestion = async (id: string) => {
