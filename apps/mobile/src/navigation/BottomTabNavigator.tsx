@@ -36,7 +36,7 @@ import Animated, { LinearTransition, FadeIn, FadeOut } from 'react-native-reanim
 const TabIcon = ({ focused, icon: IconComp, label }: { focused: boolean, icon: any, label: string }) => {
   return (
     <Animated.View 
-      layout={LinearTransition.springify().damping(16).stiffness(150)}
+      layout={LinearTransition.duration(250)}
       style={[
         styles.tabIconContainer,
         focused && styles.tabIconContainerFocused
@@ -92,7 +92,7 @@ function CustomTabBar({ state, descriptors, navigation, insets }: any) {
             onPress={onPress}
             activeOpacity={0.8}
             style={isFocused ? styles.customTabItemActive : styles.customTabItemInactive}
-            layout={LinearTransition.springify().damping(16).stiffness(150)}
+            layout={LinearTransition.duration(250)}
           >
             {options.tabBarIcon ? options.tabBarIcon({ focused: isFocused }) : null}
           </AnimatedTouchableOpacity>
