@@ -142,6 +142,13 @@ export class EngineApi {
     return { questions_answered: 1, accuracy: 100, concepts_mastered: [], concepts_needing_revisit: [] };
   }
 
+  static async getDashboardSummary(): Promise<{ time_spent_yesterday_ms: number, questions_solved_yesterday: number, total_topics_covered: number }> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id || 'anonymous';
+    const res = await engineApi.get(`/dashboard/summary?user_id=${userId}`);
+    return res.data;
+  }
+
   static getArenaChapters = async (): Promise<ArenaChapter[]> => [];
   static getArenaRating = async (): Promise<ArenaRating> => ({ rating: 1000, tier_label: "Beginner" });
   static startArenaSession = async (): Promise<any> => ({});

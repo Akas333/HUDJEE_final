@@ -14,32 +14,54 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Bell, Footprints } from 'lucide-react-native';
+import { useProgressStore } from '../store/progressStore';
 
 const { width } = Dimensions.get('window');
 const CONTENT_PADDING = 16;
 const CARD_WIDTH = width - (CONTENT_PADDING * 2);
-
-const CARDS_DATA = [
-  { id: '1', content: 'time' },
-  { id: '2', content: 'empty' },
-  { id: '3', content: 'empty' },
-  { id: '4', content: 'empty' },
-  { id: '5', content: 'empty' },
-  { id: '6', content: 'empty' },
-];
-
 export default function DashboardScreen({ navigation }: any) {
   const fadeAnim = useRef(new RNAnimated.Value(0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
+  const fetchDashboardSummary = useProgressStore((state) => state.fetchDashboardSummary);
+  const dashboardSummary = useProgressStore((state) => state.dashboardSummary);
+
+  const timeHrs = dashboardSummary ? Math.floor(dashboardSummary.time_spent_yesterday_ms / (1000 * 60 * 60)) : 0;
+  const timeMins = dashboardSummary ? Math.floor((dashboardSummary.time_spent_yesterday_ms / (1000 * 60)) % 60) : 0;
+  
+  const cardsData = [
+    { 
+      id: '1', 
+      title: "You've Spent",
+      bigValue: timeHrs.toString(),
+      smallValue: `hrs ${timeMins}mins`,
+      subtitle: "Yesterday"
+    },
+    { 
+      id: '2', 
+      title: "Questions Solved",
+      bigValue: dashboardSummary ? dashboardSummary.questions_solved_yesterday.toString() : '0',
+      smallValue: "",
+      subtitle: "Yesterday"
+    },
+    { 
+      id: '3', 
+      title: "Topics Covered",
+      bigValue: dashboardSummary ? dashboardSummary.total_topics_covered.toString() : '0',
+      smallValue: "",
+      subtitle: "Till Now"
+    }
+  ];
+
   useEffect(() => {
+    fetchDashboardSummary();
     RNAnimated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
 
     // Auto-slide every 5 seconds
     const interval = setInterval(() => {
       setActiveIndex((prevIndex) => {
-        const nextIndex = (prevIndex + 1) % CARDS_DATA.length;
+        const nextIndex = (prevIndex + 1) % cardsData.length;
         if (scrollViewRef.current) {
           scrollViewRef.current.scrollTo({ x: nextIndex * CARD_WIDTH, animated: true });
         }
@@ -102,7 +124,7 @@ export default function DashboardScreen({ navigation }: any) {
               onMomentumScrollEnd={handleScroll}
               scrollEventThrottle={16}
             >
-              {CARDS_DATA.map((card, index) => (
+              {cardsData.map((card, index) => (
                 <View key={card.id} style={styles.slideWrapper}>
                   <LinearGradient
                     colors={['#494563', '#28263A']}
@@ -110,37 +132,24 @@ export default function DashboardScreen({ navigation }: any) {
                     end={{ x: 1, y: 1 }}
                     style={styles.summaryCard}
                   >
-                    {card.content === 'time' ? (
-                      <View style={styles.summaryContent}>
-                        <View>
-                          <Text style={styles.timeCardSubtitle}>You've Spent</Text>
-                          <View style={styles.timeCardRow}>
-                            <Text style={styles.timeCardBigNum}>4</Text>
-                            <Text style={styles.timeCardSmallText}>hrs 53mins</Text>
-                          </View>
-                          <Text style={styles.timeCardSubtitle}>Yesterday</Text>
+                    <View style={styles.summaryContent}>
+                      <View>
+                        <Text style={styles.timeCardSubtitle}>{card.title}</Text>
+                        <View style={styles.timeCardRow}>
+                          <Text style={styles.timeCardBigNum}>{card.bigValue}</Text>
+                          {card.smallValue ? <Text style={styles.timeCardSmallText}>{card.smallValue}</Text> : null}
                         </View>
-                        <View style={styles.paginationDots}>
-                          {CARDS_DATA.map((_, dotIndex) => (
-                            <View 
-                              key={dotIndex} 
-                              style={dotIndex === activeIndex ? styles.dotActive : styles.dotInactive} 
-                            />
-                          ))}
-                        </View>
+                        <Text style={styles.timeCardSubtitle}>{card.subtitle}</Text>
                       </View>
-                    ) : (
-                      <View style={styles.summaryContent}>
-                        <View style={styles.paginationDots}>
-                          {CARDS_DATA.map((_, dotIndex) => (
-                            <View 
-                              key={dotIndex} 
-                              style={dotIndex === activeIndex ? styles.dotActive : styles.dotInactive} 
-                            />
-                          ))}
-                        </View>
+                      <View style={styles.paginationDots}>
+                        {cardsData.map((_, dotIndex) => (
+                          <View 
+                            key={dotIndex} 
+                            style={dotIndex === activeIndex ? styles.dotActive : styles.dotInactive} 
+                          />
+                        ))}
                       </View>
-                    )}
+                    </View>
                   </LinearGradient>
                 </View>
               ))}
