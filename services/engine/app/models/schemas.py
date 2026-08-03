@@ -44,6 +44,7 @@ class AnswerSubmitRequest(BaseModel):
     question_id: str
     is_correct: bool
     time_taken_ms: int
+    seen_question_ids: List[str] = Field(default_factory=list)
 
 class AnswerSubmitResponse(BaseModel):
     correct: bool
@@ -55,6 +56,7 @@ class SkipRequest(BaseModel):
     user_id: str
     session_id: str
     question_id: str
+    seen_question_ids: List[str] = Field(default_factory=list)
 
 class SkipResponse(BaseModel):
     next_question: Optional[dict] = None

@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Toast } from '@/components/Toast';
+import { ImageIcon, Wand2, Loader2 } from 'lucide-react';
 
 function NewQuestionForm() {
   const router = useRouter();
@@ -31,7 +32,12 @@ function NewQuestionForm() {
     correct_answer: '',
     solution: '',
     published: false,
+    author_difficulty_bucket: '',
+    author_prior_b: 0,
   });
+
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const [options, setOptions] = useState([{ id: '1', text: '' }, { id: '2', text: '' }]);
   
@@ -225,6 +231,8 @@ function NewQuestionForm() {
       pyq_year: formData.pyq_year ? parseInt(formData.pyq_year) : null,
       pyq_paper: formData.pyq_paper ? parseInt(formData.pyq_paper) : null,
       pyq_shift: formData.pyq_shift ? parseInt(formData.pyq_shift) : null,
+      author_difficulty_bucket: formData.author_difficulty_bucket || 'medium',
+      author_prior_b: formData.author_prior_b || 0,
     };
 
     const url = editId ? `/api/questions/${editId}` : '/api/questions';
@@ -341,8 +349,95 @@ function NewQuestionForm() {
         )}
 
         <div>
-          <label className="block text-sm font-medium text-zinc-400 mb-2">Question Body (LaTeX supported)</label>
+          <div className="flex justify-between items-center mb-2">
+            <label className="block text-sm font-medium text-zinc-400">Question Body (LaTeX supported)</label>
+            <label className={`cursor-pointer flex items-center gap-2 text-sm font-medium transition-colors ${isUploadingImage ? 'text-zinc-500' : 'text-[#8692f7] hover:text-[#6a78f2]'}`}>
+              {isUploadingImage ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={16} />}
+              {isUploadingImage ? 'Uploading...' : 'Upload Image'}
+              <input 
+                type="file" 
+                accept="image/*" 
+                className="hidden" 
+                disabled={isUploadingImage}
+                onChange={async (e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    setIsUploadingImage(true);
+                    try {
+                      const fd = new FormData();
+                      fd.append('image', e.target.files[0]);
+                      const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                      const data = await res.json();
+                      if (data.error) throw new Error(data.error);
+                      setFormData({...formData, question_body: formData.question_body + `\n![image](${data.url})\n`});
+                      setToast({ message: 'Image uploaded & watermarked successfully!', type: 'success' });
+                    } catch (err: any) {
+                      setToast({ message: err.message, type: 'error' });
+                    } finally {
+                      setIsUploadingImage(false);
+                      e.target.value = '';
+                    }
+                  }
+                }} 
+              />
+            </label>
+          </div>
           <textarea required rows={6} value={formData.question_body} onBlur={() => pushHistory(formData, options)} onChange={e => setFormData({...formData, question_body: e.target.value})} className="w-full p-4 bg-[#141416] border border-[#333] text-white rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Write question content here..."></textarea>
+          
+          {/* AI Evaluation Button */}
+          <div className="mt-4 flex flex-col md:flex-row gap-4 items-start md:items-center p-4 bg-[#1a1a1c] border border-[#262626] rounded-xl">
+            <button
+              type="button"
+              disabled={isEvaluating || !formData.question_body}
+              onClick={async () => {
+                setIsEvaluating(true);
+                try {
+                  const payload = {
+                    question_body: formData.question_body,
+                    options: formData.format.includes('mcq') ? options : null,
+                    subject: formData.subject
+                  };
+                  const res = await fetch('/api/evaluate-question', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                  });
+                  const data = await res.json();
+                  if (data.error) throw new Error(data.error);
+                  
+                  setFormData(prev => ({
+                    ...prev,
+                    author_difficulty_bucket: data.author_difficulty_bucket,
+                    author_prior_b: data.author_prior_b
+                  }));
+                  setToast({ message: 'AI evaluated question successfully!', type: 'success' });
+                } catch (err: any) {
+                  setToast({ message: err.message || 'AI evaluation failed', type: 'error' });
+                } finally {
+                  setIsEvaluating(false);
+                }
+              }}
+              className="flex items-center gap-2 bg-[#2c2e3e] hover:bg-[#3a3c4f] disabled:bg-[#222] disabled:text-zinc-600 text-[#a5b4fc] px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+            >
+              {isEvaluating ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+              Auto-Evaluate Difficulty
+            </button>
+
+            <div className="flex gap-4 flex-1 w-full">
+              <div className="flex-1">
+                <select value={formData.author_difficulty_bucket} onChange={e => setFormData({...formData, author_difficulty_bucket: e.target.value})} className="w-full p-2 bg-[#141416] border border-[#333] text-zinc-300 rounded-lg text-sm focus:outline-none focus:border-primary">
+                  <option value="">Select Bucket...</option>
+                  <option value="easy">Easy</option>
+                  <option value="slightly_easy">Slightly Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="slightly_medium">Slightly Medium</option>
+                  <option value="slightly_hard">Slightly Hard</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <input type="number" step="0.1" value={formData.author_prior_b} onChange={e => setFormData({...formData, author_prior_b: parseFloat(e.target.value)})} className="w-full p-2 bg-[#141416] border border-[#333] text-zinc-300 rounded-lg text-sm focus:outline-none focus:border-primary" placeholder="Prior b (e.g. 0.5)" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* FORMAT-SPECIFIC UI */}
@@ -354,33 +449,73 @@ function NewQuestionForm() {
                 + Add Option
               </button>
             </div>
+            
+            <div className="text-xs text-zinc-500 font-medium mb-1 pl-12 uppercase tracking-widest">Select Correct</div>
             <div className="space-y-3">
-              {options.map((opt, i) => {
+              {options.map((opt: any, i) => {
                 const isChecked = formData.format === 'mcq_single' 
                   ? formData.correct_answer === (i + 1).toString()
                   : formData.correct_answer.split(',').includes((i + 1).toString());
                 
                 return (
-                  <div key={opt.id} className="flex gap-3 items-center">
-                    <div className="w-8 flex justify-center">
-                      {formData.format === 'mcq_single' || formData.format === 'assertion_reason' ? (
-                        <input type="radio" name="correct_answer" checked={isChecked} onChange={() => setFormData({...formData, correct_answer: (i + 1).toString()})} className="w-4 h-4 text-primary bg-[#141416] border-[#333] focus:ring-primary/20" />
-                      ) : (
-                        <input type="checkbox" checked={isChecked} onChange={(e) => {
-                          let current = formData.correct_answer ? formData.correct_answer.split(',') : [];
-                          if (e.target.checked) current.push((i + 1).toString());
-                          else current = current.filter(val => val !== (i + 1).toString());
-                          setFormData({...formData, correct_answer: current.sort().join(',')});
-                        }} className="w-4 h-4 text-primary bg-[#141416] border-[#333] rounded focus:ring-primary/20" />
-                      )}
+                  <div key={opt.id} className="flex flex-col gap-2 p-3 bg-[#1a1a1c] border border-[#262626] rounded-xl">
+                    <div className="flex gap-3 items-center">
+                      <div className="w-8 flex justify-center">
+                        {formData.format === 'mcq_single' || formData.format === 'assertion_reason' ? (
+                          <input type="radio" name="correct_answer" checked={isChecked} onChange={() => setFormData({...formData, correct_answer: (i + 1).toString()})} className="w-4 h-4 text-primary bg-[#141416] border-[#333] focus:ring-primary/20" />
+                        ) : (
+                          <input type="checkbox" checked={isChecked} onChange={(e) => {
+                            let current = formData.correct_answer ? formData.correct_answer.split(',') : [];
+                            if (e.target.checked) current.push((i + 1).toString());
+                            else current = current.filter(val => val !== (i + 1).toString());
+                            setFormData({...formData, correct_answer: current.sort().join(',')});
+                          }} className="w-4 h-4 text-primary bg-[#141416] border-[#333] rounded focus:ring-primary/20" />
+                        )}
+                      </div>
+                      <span className="w-4 text-center font-bold text-zinc-500">{i + 1}</span>
+                      <input type="text" value={opt.text} onChange={e => {
+                        const newOpts = [...options];
+                        newOpts[i].text = e.target.value;
+                        setOptions(newOpts);
+                      }} className="flex-1 p-2.5 bg-[#141416] border border-[#333] text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder={`Option text`} />
+                      
+                      <label className="cursor-pointer text-zinc-400 hover:text-[#8692f7] p-2 transition-colors">
+                        <ImageIcon size={18} />
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const loadingToastId = Date.now().toString();
+                            setToast({ message: 'Uploading option image...', type: 'success' });
+                            try {
+                              const fd = new FormData();
+                              fd.append('image', e.target.files[0]);
+                              const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+                              const data = await res.json();
+                              if (data.error) throw new Error(data.error);
+                              
+                              const newOpts = [...options];
+                              newOpts[i].image_url = data.url;
+                              setOptions(newOpts);
+                              setToast({ message: 'Option image added!', type: 'success' });
+                            } catch (err: any) {
+                              setToast({ message: err.message, type: 'error' });
+                            }
+                            e.target.value = '';
+                          }
+                        }} />
+                      </label>
+
+                      <button type="button" onClick={() => setOptions(options.filter((_, idx) => idx !== i))} className="text-rose-400 hover:bg-rose-400/10 p-2 rounded-lg transition-colors">✕</button>
                     </div>
-                    <span className="w-4 text-center font-bold text-zinc-500">{i + 1}</span>
-                    <input type="text" value={opt.text} onChange={e => {
-                      const newOpts = [...options];
-                      newOpts[i].text = e.target.value;
-                      setOptions(newOpts);
-                    }} className="flex-1 p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder={`Option text`} />
-                    <button type="button" onClick={() => setOptions(options.filter((_, idx) => idx !== i))} className="text-rose-400 hover:bg-rose-400/10 p-2.5 rounded-lg transition-colors">✕</button>
+                    {opt.image_url && (
+                      <div className="ml-16 relative w-fit">
+                        <img src={opt.image_url} alt="Option image" className="h-16 rounded border border-[#333] object-contain" />
+                        <button type="button" onClick={() => {
+                          const newOpts = [...options];
+                          delete newOpts[i].image_url;
+                          setOptions(newOpts);
+                        }} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✕</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

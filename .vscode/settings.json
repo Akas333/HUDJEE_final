@@ -1,0 +1,6 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/CAT4AI-master/.venv/bin/python",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/CAT4AI-master"
+  ]
+}

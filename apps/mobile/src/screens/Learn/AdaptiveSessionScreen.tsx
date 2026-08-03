@@ -168,7 +168,8 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
     updateFeedItem(currentIndex, { status: 'loading' });
     
     try {
-      const res = await EngineApi.submitAnswer(sessionId, currentItem.question.question_id, currentItem.selectedOption, 2500);
+      const seenQuestionIds = feed.map(f => f.question?.question_id).filter(Boolean) as string[];
+      const res = await EngineApi.submitAnswer(sessionId, currentItem.question.question_id, currentItem.selectedOption, 2500, seenQuestionIds);
       
       const newInteractions = interactionCount + 1;
       setInteractionCount(newInteractions);
@@ -227,7 +228,8 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
     setIsProcessingSkip(true);
     
     try {
-      const res = await EngineApi.skipQuestion(sessionId, skipItem.question.question_id);
+      const seenQuestionIds = feed.map(f => f.question?.question_id).filter(Boolean) as string[];
+      const res = await EngineApi.skipQuestion(sessionId, skipItem.question.question_id, seenQuestionIds);
       setInteractionCount(c => c + 1);
       setStreak(0);
 
@@ -588,7 +590,7 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
           <FlatList
             ref={flatListRef}
             data={flatListData}
-            keyExtractor={item => item.id}
+            keyExtractor={(item, index) => `${item.id}-${index}`}
             showsVerticalScrollIndicator={false}
             pagingEnabled
             snapToInterval={cardHeight}

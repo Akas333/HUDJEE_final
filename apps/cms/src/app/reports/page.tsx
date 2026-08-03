@@ -122,6 +122,13 @@ export default function ReportsPage() {
                     </span>
                   </div>
                   
+                  {report.questions?.published === false && (
+                    <div className="flex items-center gap-2 text-rose-500 bg-rose-500/10 px-3 py-1.5 rounded-lg w-fit">
+                      <AlertTriangle size={14} />
+                      <span className="text-xs font-bold uppercase tracking-wider">Auto-Suspended</span>
+                    </div>
+                  )}
+                  
                   {report.details && (
                     <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-lg">
                       <p className="text-sm text-zinc-300 font-medium italic">"{report.details}"</p>

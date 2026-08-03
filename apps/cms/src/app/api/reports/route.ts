@@ -22,7 +22,8 @@ export async function GET(request: Request) {
       user_id,
       questions (
         id,
-        content
+        content,
+        published
       )
     `)
     .eq('status', status)

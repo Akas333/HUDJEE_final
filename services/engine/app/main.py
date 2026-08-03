@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import irt, cps, dashboard
+from app.routers import irt, cps, dashboard, jobs
 
 app = FastAPI(title="HUDJEE Practice Daily Engine API", version="1.0.0")
 
@@ -20,4 +20,5 @@ def health_check():
 # Include routers
 app.include_router(irt.router, prefix="/irt", tags=["IRT"])
 app.include_router(cps.router, prefix="/internal", tags=["CPS Batch"])
+app.include_router(jobs.router, tags=["Jobs"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])

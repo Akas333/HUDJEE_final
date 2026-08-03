@@ -105,36 +105,34 @@ export class EngineApi {
     return response.data;
   }
 
-  static async submitAnswer(sessionId: string, questionId: string, response: any, timeTakenMs: number): Promise<AnswerResponse> {
+  static async submitAnswer(sessionId: string, questionId: string, response: any, timeTakenMs: number, seenQuestionIds: string[] = []): Promise<AnswerResponse> {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || 'anonymous';
     
-    // Convert 'response' index to boolean (correctness is determined by backend but for now we might need to send true/false if we don't have server-side checking. Wait, backend checks it? No, my AnswerSubmitRequest expects `is_correct: bool`.)
-    // Wait, we need to know if the user is correct to send to backend!
-    // If the frontend does not know the correct answer, how can it send is_correct? 
-    // Ideally, the backend should check correctness! But my MVP backend `submit_answer` just accepts `is_correct` from the frontend.
-    // Let's assume the frontend fetches the question from Supabase to check correctness.
+    // Fetch correct answer directly from database
     const { data: qData } = await supabase.from('questions').select('correct_answer').eq('id', questionId).single();
     const isCorrect = qData?.correct_answer === String(response);
-    
+
     const res = await engineApi.post('/irt/session/answer', {
       user_id: userId,
       session_id: sessionId,
       question_id: questionId,
       is_correct: isCorrect,
-      time_taken_ms: timeTakenMs
+      time_taken_ms: timeTakenMs,
+      seen_question_ids: seenQuestionIds
     });
     return res.data;
   }
 
-  static async skipQuestion(sessionId: string, questionId: string): Promise<SkipResponse> {
+  static async skipQuestion(sessionId: string, questionId: string, seenQuestionIds: string[] = []): Promise<SkipResponse> {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || 'anonymous';
     
     const res = await engineApi.post('/irt/session/skip', {
       user_id: userId,
       session_id: sessionId,
-      question_id: questionId
+      question_id: questionId,
+      seen_question_ids: seenQuestionIds
     });
     return res.data;
   }
