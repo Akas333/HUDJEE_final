@@ -9,7 +9,6 @@ import VideoInterfaceScreen from '../screens/Learn/VideoInterfaceScreen';
 import PracticeListScreen from '../screens/Learn/PracticeListScreen';
 import PracticeInterfaceScreen from '../screens/Learn/PracticeInterfaceScreen';
 import WatchPracticeBridgeScreen from '../screens/Learn/WatchPracticeBridgeScreen';
-import AdaptiveSessionScreen from '../screens/Learn/AdaptiveSessionScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -18,7 +17,6 @@ export default function PracticeNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
       <Stack.Screen name="PracticeScreen" component={PracticeScreen} />
       <Stack.Screen name="PracticeConceptScreen" component={PracticeConceptScreen} />
-      <Stack.Screen name="AdaptiveSessionScreen" component={AdaptiveSessionScreen} />
       <Stack.Screen name="UnitCardScreen" component={UnitCardScreen} />
       <Stack.Screen name="ChapterCardScreen" component={ChapterCardScreen} />
       <Stack.Screen name="LecturesListScreen" component={LecturesListScreen} />

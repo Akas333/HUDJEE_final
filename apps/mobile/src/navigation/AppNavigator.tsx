@@ -5,6 +5,7 @@ import BottomTabNavigator from './BottomTabNavigator';
 import AuthNavigator from './AuthNavigator';
 import TestAnalysisNavigator from './TestAnalysisNavigator';
 import SettingsNavigator from './SettingsNavigator';
+import AdaptiveSessionScreen from '../screens/Learn/AdaptiveSessionScreen';
 import { useAuthStore } from '../store/authStore';
 import { supabase } from '../lib/supabase';
 
@@ -13,6 +14,7 @@ export type RootStackParamList = {
   MainTabs: undefined;
   TestAnalysisStack: undefined;
   SettingsStack: undefined;
+  AdaptiveSessionScreen: { chapterId: string; chapterTitle: string; conceptId?: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -49,6 +51,11 @@ export default function AppNavigator() {
         <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
         <Stack.Screen name="TestAnalysisStack" component={TestAnalysisNavigator} />
         <Stack.Screen name="SettingsStack" component={SettingsNavigator} />
+        <Stack.Screen 
+          name="AdaptiveSessionScreen" 
+          component={AdaptiveSessionScreen} 
+          options={{ animation: 'slide_from_bottom', gestureEnabled: false }} 
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

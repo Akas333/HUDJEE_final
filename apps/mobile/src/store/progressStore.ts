@@ -2,9 +2,12 @@ import { create } from 'zustand';
 import { EngineApi } from '../services/api';
 
 interface DashboardSummary {
-  time_spent_yesterday_ms: number;
-  questions_solved_yesterday: number;
-  total_topics_covered: number;
+  time_invested_insight: string;
+  streak_insight: string;
+  strongest_subject_insight: string;
+  needs_attention_insight: string | null;
+  arena_movement_insight: string | null;
+  social_rank_insight: string | null;
 }
 
 interface ProgressState {

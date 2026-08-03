@@ -31,10 +31,12 @@ class CPSScore(BaseModel):
 class SessionStartRequest(BaseModel):
     user_id: str
     chapter_id: str
+    concept_id: Optional[str] = None
 
 class SessionStartResponse(BaseModel):
     session_id: str
-    first_question: dict
+    first_question: Optional[dict] = None
+    exhausted: bool = False
 
 class AnswerSubmitRequest(BaseModel):
     user_id: str
@@ -58,3 +60,9 @@ class SkipResponse(BaseModel):
     next_question: Optional[dict] = None
     concept_deferred: bool = False
     chapter_exhausted: bool = False
+
+class ReportRequest(BaseModel):
+    user_id: str
+    question_id: str
+    reason: str
+    details: Optional[str] = None

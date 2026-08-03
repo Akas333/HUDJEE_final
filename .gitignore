@@ -40,3 +40,7 @@ yarn-error.*
 # Build artifacts
 android/
 ios/
+__pycache__/
+*.pyc
+*.log
+.venv/

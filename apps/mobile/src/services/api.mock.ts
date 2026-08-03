@@ -9,6 +9,7 @@ export interface Chapter {
   mastery_pct: number;
   status: ChapterStatus;
   subject?: string;
+  total_questions?: number;
 }
 
 export interface Question {

@@ -97,8 +97,8 @@ function ChapterCard({ chapter, onPress, delay = 0 }: { chapter: Chapter; onPres
           </View>
           
           <View style={chapterStyles.statsRow}>
-            <Text style={chapterStyles.statText}>10k Ques Solved</Text>
-            <Text style={chapterStyles.statText}>147hrs spent</Text>
+            <Text style={chapterStyles.statText}>0 Ques Solved</Text>
+            <Text style={chapterStyles.statText}>0hrs spent</Text>
           </View>
         </View>
       </Pressable>

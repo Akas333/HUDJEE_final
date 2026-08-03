@@ -67,9 +67,10 @@ export class EngineApi {
     return (data || []).map((c: any) => ({
       chapter_id: c.id,
       name: c.name,
-      mastery_pct: Math.floor(Math.random() * 100),
+      mastery_pct: 0,
       status: "in_progress",
       subject: c.subject,
+      total_questions: c.total_questions || 0,
     }));
   }
 
@@ -88,17 +89,18 @@ export class EngineApi {
     return (data || []).map((t: any) => ({
       id: t.id,
       title: t.name,
-      progress: Math.floor(Math.random() * 100),
+      progress: 0,
     }));
   }
 
-  static async startSession(chapterId: string): Promise<{ session_id: string, first_question: Question }> {
+  static async startSession(chapterId: string, conceptId?: string): Promise<{ session_id: string, first_question: Question | null, exhausted?: boolean }> {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || 'anonymous';
 
     const response = await engineApi.post('/irt/session/start', {
       user_id: userId,
-      chapter_id: chapterId
+      chapter_id: chapterId,
+      ...(conceptId && { concept_id: conceptId })
     });
     return response.data;
   }
@@ -142,11 +144,35 @@ export class EngineApi {
     return { questions_answered: 1, accuracy: 100, concepts_mastered: [], concepts_needing_revisit: [] };
   }
 
-  static async getDashboardSummary(): Promise<{ time_spent_yesterday_ms: number, questions_solved_yesterday: number, total_topics_covered: number }> {
+  static async reportQuestion(questionId: string, reason: string, details?: string): Promise<void> {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || 'anonymous';
-    const res = await engineApi.get(`/dashboard/summary?user_id=${userId}`);
-    return res.data;
+    
+    await engineApi.post('/irt/session/report', {
+      user_id: userId,
+      question_id: questionId,
+      reason,
+      details
+    });
+  }
+
+  static async getDashboardSummary(): Promise<any> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || 'anonymous';
+      const res = await engineApi.get(`/dashboard/summary?user_id=${userId}`);
+      return res.data;
+    } catch (e: any) {
+      console.warn("Backend unavailable, using mock dashboard summary. Error:", e.message);
+      return {
+        time_invested_insight: "Not enough data yet. Start practicing to see your insights!",
+        streak_insight: "Set your goal and make some progress!",
+        strongest_subject_insight: "Complete more questions to discover your strengths.",
+        needs_attention_insight: null,
+        arena_movement_insight: null,
+        social_rank_insight: null
+      };
+    }
   }
 
   static getArenaChapters = async (): Promise<ArenaChapter[]> => [];

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const chapter_id = searchParams.get('chapter_id');
 
-  let query = supabase.from('topics').select('*, chapters(name)').order('sort_order', { ascending: true });
+  let query = supabase.from('topics').select('*, chapters(name, subject)').order('sort_order', { ascending: true });
   if (chapter_id) query = query.eq('chapter_id', chapter_id);
 
   const { data, error } = await query;

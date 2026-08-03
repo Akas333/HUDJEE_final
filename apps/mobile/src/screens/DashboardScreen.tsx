@@ -27,32 +27,17 @@ export default function DashboardScreen({ navigation }: any) {
   const fetchDashboardSummary = useProgressStore((state) => state.fetchDashboardSummary);
   const dashboardSummary = useProgressStore((state) => state.dashboardSummary);
 
-  const timeHrs = dashboardSummary ? Math.floor(dashboardSummary.time_spent_yesterday_ms / (1000 * 60 * 60)) : 0;
-  const timeMins = dashboardSummary ? Math.floor((dashboardSummary.time_spent_yesterday_ms / (1000 * 60)) % 60) : 0;
-  
-  const cardsData = [
-    { 
-      id: '1', 
-      title: "You've Spent",
-      bigValue: timeHrs.toString(),
-      smallValue: `hrs ${timeMins}mins`,
-      subtitle: "Yesterday"
-    },
-    { 
-      id: '2', 
-      title: "Questions Solved",
-      bigValue: dashboardSummary ? dashboardSummary.questions_solved_yesterday.toString() : '0',
-      smallValue: "",
-      subtitle: "Yesterday"
-    },
-    { 
-      id: '3', 
-      title: "Topics Covered",
-      bigValue: dashboardSummary ? dashboardSummary.total_topics_covered.toString() : '0',
-      smallValue: "",
-      subtitle: "Till Now"
-    }
+  const rawCards = [
+    { id: '1', title: "Time Invested", text: dashboardSummary?.time_invested_insight },
+    { id: '2', title: "Streak", text: dashboardSummary?.streak_insight },
+    { id: '3', title: "Strongest Subject", text: dashboardSummary?.strongest_subject_insight },
+    { id: '4', title: "Needs Attention", text: dashboardSummary?.needs_attention_insight },
+    { id: '5', title: "Arena Movement", text: dashboardSummary?.arena_movement_insight },
+    { id: '6', title: "Social", text: dashboardSummary?.social_rank_insight }
   ];
+  
+  // Only keep cards that have non-null text
+  const cardsData = rawCards.filter(c => c.text != null);
 
   useEffect(() => {
     fetchDashboardSummary();
@@ -134,12 +119,10 @@ export default function DashboardScreen({ navigation }: any) {
                   >
                     <View style={styles.summaryContent}>
                       <View>
-                        <Text style={styles.timeCardSubtitle}>{card.title}</Text>
-                        <View style={styles.timeCardRow}>
-                          <Text style={styles.timeCardBigNum}>{card.bigValue}</Text>
-                          {card.smallValue ? <Text style={styles.timeCardSmallText}>{card.smallValue}</Text> : null}
+                        <Text style={styles.insightTitle}>{card.title}</Text>
+                        <View style={styles.insightTextRow}>
+                          <Text style={styles.insightText}>{card.text}</Text>
                         </View>
-                        <Text style={styles.timeCardSubtitle}>{card.subtitle}</Text>
                       </View>
                       <View style={styles.paginationDots}>
                         {cardsData.map((_, dotIndex) => (
@@ -244,10 +227,9 @@ const styles = StyleSheet.create({
   slideWrapper: { width: CARD_WIDTH, paddingRight: 10 },
   summaryCard: { width: '100%', height: '100%', borderRadius: 24, padding: 24 },
   summaryContent: { flex: 1, justifyContent: 'space-between' },
-  timeCardSubtitle: { color: '#F3F4F6', fontSize: 18, fontWeight: '700' },
-  timeCardRow: { flexDirection: 'row', alignItems: 'baseline', marginVertical: 4 },
-  timeCardBigNum: { color: '#FFFFFF', fontSize: 46, fontWeight: '800', letterSpacing: -1 },
-  timeCardSmallText: { color: '#F3F4F6', fontSize: 18, fontWeight: '700', marginLeft: 6 },
+  insightTitle: { color: '#9CA3AF', fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  insightTextRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  insightText: { color: '#FFFFFF', fontSize: 24, fontWeight: '700', lineHeight: 32 },
   
   paginationDots: { flexDirection: 'row', alignSelf: 'flex-end', alignItems: 'center', gap: 6 },
   dotActive: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF' },

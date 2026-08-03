@@ -1,242 +1,492 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Animated,
-  Modal,
-  PanResponder
-} from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, TextInput, FlatList, AppState, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, CheckCircle, XCircle, ArrowRight, SkipForward, AlertCircle } from 'lucide-react-native';
+import { X, CheckCircle, Flame, ChevronLeft, Bookmark, Flag, Share2, AlertTriangle, Trophy } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+
 import { colors } from '../../theme/colors';
 import { Question, AnswerResponse, SessionSummary } from '../../services/api.mock';
 import { EngineApi } from '../../services/api';
+import QuestionCard from '../../components/QuestionCard';
 
-// ─── MathText Dummy Component ─────────────────────────────────────────────────
-// In a real implementation, replace this with react-native-math-view or react-native-katex
-const MathText = ({ content, style }: { content: string, style?: any }) => {
-  return <Text style={[style, { fontFamily: 'System' }]}>{content}</Text>;
-};
+export interface FeedItem {
+  id: string;
+  type: 'question' | 'loading';
+  question?: Question;
+  status?: 'answering' | 'correct' | 'incorrect' | 'skipped' | 'loading';
+  selectedOption?: number | null;
+  answerData?: AnswerResponse | null;
+}
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdaptiveSessionScreen({ navigation, route }: any) {
-  const { chapterId, chapterTitle } = route.params || { chapterId: 'c1', chapterTitle: 'Practice' };
+  const { chapterId, chapterTitle, conceptId } = route.params || { chapterId: 'c1', chapterTitle: 'Practice' };
   
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [currentQ, setCurrentQ] = useState<Question | null>(null);
   
-  const [status, setStatus] = useState<'loading' | 'answering' | 'correct' | 'incorrect' | 'exhausted' | 'summary'>('loading');
-  const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [answerData, setAnswerData] = useState<AnswerResponse | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<'loading' | 'error' | 'active' | 'exhausted' | 'summary'>('loading');
   const [summaryData, setSummaryData] = useState<SessionSummary | null>(null);
   
-  // Stats for the top bar progress (count of answered/skipped)
-  const [interactionCount, setInteractionCount] = useState(0);
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isProcessingSkip, setIsProcessingSkip] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
 
-  // Animations
-  const toastOpacity = useRef(new Animated.Value(0)).current;
+  // Session Strip Stats
+  const [interactionCount, setInteractionCount] = useState(0);
+  const [accuracy, setAccuracy] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [sessionTime, setSessionTime] = useState(0);
+
+  // Global Session Timer
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSessionTime(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  // Toast State
   const [toastMsg, setToastMsg] = useState('');
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
-    Animated.sequence([
-      Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.delay(2000),
-      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
-    ]).start();
+    setTimeout(() => setToastMsg(''), 2500);
   };
 
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  // Report State
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportDetails, setReportDetails] = useState('');
 
-  // Animate new question coming in from bottom
+  const [cardHeight, setCardHeight] = useState(0);
+
+  // ── Anti-cheat: App Switch Detection ──
+  const [showSwitchWarning, setShowSwitchWarning] = useState(false);
+  const switchWarningShownRef = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
+
   useEffect(() => {
-    if (currentQ) {
-      slideAnim.setValue(800);
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        friction: 8,
-        tension: 50
-      }).start();
-    }
-  }, [currentQ?.question_id]);
-
-  const handleSwipeUp = () => {
-    Animated.timing(slideAnim, {
-      toValue: -800,
-      duration: 250,
-      useNativeDriver: true
-    }).start(() => {
-      // Trigger advance logic after it slides out
-      if (status === 'answering') {
-        handleSkip();
-      } else if (status === 'incorrect' || status === 'correct') {
-        handleAdvance(answerData?.next_question || null, answerData?.chapter_exhausted || false);
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      // User went to background or inactive
+      if (
+        appStateRef.current === 'active' &&
+        (nextAppState === 'background' || nextAppState === 'inactive')
+      ) {
+        if (sessionStatus === 'active') {
+          if (switchWarningShownRef.current) {
+            // Second offense — end the session
+            navigation.goBack();
+          } else {
+            // First offense — show warning when they come back
+            switchWarningShownRef.current = true;
+          }
+        }
       }
+
+      // User came back to foreground
+      if (
+        (appStateRef.current === 'background' || appStateRef.current === 'inactive') &&
+        nextAppState === 'active'
+      ) {
+        if (switchWarningShownRef.current && sessionStatus === 'active') {
+          setShowSwitchWarning(true);
+        }
+      }
+
+      appStateRef.current = nextAppState;
     });
-  };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
-         // Capture if it's a strong upward swipe (dy is negative for swipe up)
-         return gestureState.dy < -40 && Math.abs(gestureState.vy) > 0.5;
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-         if (gestureState.dy < -50) {
-            handleSwipeUp();
-         } else {
-            // snap back if swipe wasn't far enough
-            Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
-         }
-      }
-    })
-  ).current;
+    return () => subscription.remove();
+  }, [sessionStatus]);
 
   useEffect(() => {
     const initSession = async () => {
-      setStatus('loading');
-      const res = await EngineApi.startSession(chapterId);
-      setSessionId(res.session_id);
-      setCurrentQ(res.first_question);
-      setStatus('answering');
+      setSessionStatus('loading');
+      try {
+        const res = await EngineApi.startSession(chapterId, conceptId);
+        setSessionId(res.session_id);
+        
+        if (res.exhausted || !res.first_question) {
+          setSessionStatus('exhausted');
+          return;
+        }
+
+        setFeed([{
+          id: res.first_question.question_id,
+          type: 'question',
+          question: res.first_question,
+          status: 'answering',
+          selectedOption: null,
+          answerData: null
+        }]);
+        setSessionStatus('active');
+      } catch (err: any) {
+        console.error("Error starting session:", err);
+        setSessionStatus('error');
+        
+        const detail = err.response?.data?.detail;
+        if (err.response?.status === 404) {
+          setErrorMsg("No questions have been added for this concept yet!");
+        } else if (detail) {
+          setErrorMsg(detail);
+        } else {
+          setErrorMsg("Something went wrong loading this session.");
+        }
+      }
     };
     initSession();
   }, [chapterId]);
 
+  const updateFeedItem = (index: number, updates: Partial<FeedItem>) => {
+    setFeed(prev => {
+      const newFeed = [...prev];
+      if (newFeed[index]) {
+        newFeed[index] = { ...newFeed[index], ...updates };
+      }
+      return newFeed;
+    });
+  };
+
   const handleSelect = (index: number) => {
-    if (status !== 'answering') return;
-    setSelectedOption(index);
+    if (feed[currentIndex]?.status !== 'answering') return;
+    updateFeedItem(currentIndex, { selectedOption: index });
   };
 
   const handleSubmit = async () => {
-    if (status !== 'answering' || selectedOption === null || !sessionId || !currentQ) return;
+    const currentItem = feed[currentIndex];
+    if (currentItem?.status !== 'answering' || currentItem.selectedOption === null || !sessionId || !currentItem.question) return;
     
-    setStatus('loading');
-    const res = await EngineApi.submitAnswer(sessionId, currentQ.question_id, selectedOption, 2500);
-    setAnswerData(res);
-    setInteractionCount(c => c + 1);
-
-    if (res.correct) {
-      setStatus('correct');
-      // Auto-advance after 1.2s
-      setTimeout(() => {
-        handleAdvance(res.next_question, res.chapter_exhausted);
-      }, 1200);
-    } else {
-      setStatus('incorrect');
-    }
-  };
-
-  const handleSkip = async () => {
-    if (status !== 'answering' || !sessionId || !currentQ) return;
+    // Optimistic disable
+    updateFeedItem(currentIndex, { status: 'loading' });
     
-    setStatus('loading');
-    const res = await EngineApi.skipQuestion(sessionId, currentQ.question_id);
-    setInteractionCount(c => c + 1);
+    try {
+      const res = await EngineApi.submitAnswer(sessionId, currentItem.question.question_id, currentItem.selectedOption, 2500);
+      
+      const newInteractions = interactionCount + 1;
+      setInteractionCount(newInteractions);
+      
+      const isCorrect = res.correct;
+      if (isCorrect) {
+        const newCorrect = correctCount + 1;
+        setCorrectCount(newCorrect);
+        setStreak(s => s + 1);
+        setAccuracy(Math.round((newCorrect / newInteractions) * 100));
+      } else {
+        setStreak(0);
+        setAccuracy(Math.round((correctCount / newInteractions) * 100));
+      }
 
-    if (res.concept_deferred) {
-      showToast("We'll come back to this concept later");
+      setFeed(prev => {
+        const newFeed = [...prev];
+        newFeed[currentIndex] = {
+          ...newFeed[currentIndex],
+          status: isCorrect ? 'correct' : 'incorrect',
+          answerData: res
+        };
+        if (!res.chapter_exhausted && res.next_question) {
+          newFeed.push({
+            id: res.next_question.question_id,
+            type: 'question',
+            question: res.next_question,
+            status: 'answering',
+            selectedOption: null,
+            answerData: null
+          });
+        }
+        return newFeed;
+      });
+
+      if (res.chapter_exhausted) {
+        setSessionStatus('exhausted');
+      }
+
+      if (isCorrect && !res.chapter_exhausted) {
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
+        }, 1200);
+      }
+      
+    } catch (err) {
+      console.error(err);
+      updateFeedItem(currentIndex, { status: 'answering' });
     }
-
-    handleAdvance(res.next_question, res.chapter_exhausted);
   };
 
-  const handleAdvance = (nextQ: Question | null, isExhausted: boolean) => {
-    if (isExhausted) {
-      setStatus('exhausted');
-    } else if (nextQ) {
-      setCurrentQ(nextQ);
-      setSelectedOption(null);
-      setAnswerData(null);
-      setStatus('answering');
+  const handleSkip = async (skipIndex: number) => {
+    const skipItem = feed[skipIndex];
+    if (skipItem?.status !== 'answering' || !sessionId || !skipItem.question) return;
+    if (isProcessingSkip) return;
+    setIsProcessingSkip(true);
+    
+    try {
+      const res = await EngineApi.skipQuestion(sessionId, skipItem.question.question_id);
+      setInteractionCount(c => c + 1);
+      setStreak(0);
+
+      if (res.concept_deferred) {
+        showToast("We'll come back to this concept later");
+      }
+
+      setFeed(prev => {
+        const newFeed = [...prev];
+        newFeed[skipIndex] = {
+          ...newFeed[skipIndex],
+          status: 'skipped'
+        };
+        if (!res.chapter_exhausted && res.next_question) {
+          newFeed.push({
+            id: res.next_question.question_id,
+            type: 'question',
+            question: res.next_question,
+            status: 'answering',
+            selectedOption: null,
+            answerData: null
+          });
+        }
+        return newFeed;
+      });
+
+      if (res.chapter_exhausted) {
+        setSessionStatus('exhausted');
+      }
+      
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsProcessingSkip(false);
     }
   };
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      const index = viewableItems[0].index;
+      setCurrentIndex(index);
+      const item = viewableItems[0].item;
+      if (!item) return;
+
+      if (item.type === 'loading') {
+        const prevIndex = index - 1;
+        if (prevIndex >= 0 && feed[prevIndex]?.status === 'answering') {
+          handleSkip(prevIndex);
+        }
+      }
+    }
+  }, [feed, isProcessingSkip]);
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
   const handleExit = async () => {
     if (sessionId) {
-      setStatus('loading');
-      const summary = await EngineApi.endSession(sessionId);
-      setSummaryData(summary);
-      setStatus('summary');
+      setSessionStatus('loading');
+      try {
+        const summary = await EngineApi.endSession(sessionId);
+        setSummaryData(summary);
+        setSessionStatus('summary');
+      } catch (err) {
+        navigation.goBack();
+      }
     } else {
       navigation.goBack();
     }
   };
 
-  // ─── Renderers ──────────────────────────────────────────────────────────────
+  const handleBookmark = () => showToast("Saved");
+  const handleReport = () => setIsReportOpen(true);
+  const handleChallenge = () => showToast("Challenge sent!");
 
-  const renderTopBar = () => {
-    return (
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.closeBtn} onPress={handleExit}>
-          <X color={colors.textSecondary} size={24} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>{chapterTitle}</Text>
-          <Text style={styles.headerSubtitle}>{interactionCount} interactions</Text>
-        </View>
-        <View style={{ width: 32 }} />
-      </View>
-    );
+  const submitReport = async () => {
+    const currentItem = feed[currentIndex];
+    if (!reportReason || !currentItem?.question) return;
+    try {
+      await EngineApi.reportQuestion(currentItem.question.question_id, reportReason, reportDetails);
+      showToast("Thanks, we'll take a look");
+    } catch (err) {
+      showToast("Failed to send report");
+    } finally {
+      setIsReportOpen(false);
+      setReportReason(null);
+      setReportDetails('');
+    }
   };
 
-  const renderToast = () => (
-    <Animated.View style={[styles.toastContainer, { opacity: toastOpacity }]} pointerEvents="none">
-      <View style={styles.toastInner}>
-        <Text style={styles.toastText}>{toastMsg}</Text>
+  // ──────────────────────────────────────────
+  // Header: exact replica from screenshot
+  // ──────────────────────────────────────────
+  const renderHeader = () => (
+    <View style={styles.headerWrap}>
+      {/* Row 1: Back on left · Logo centered */}
+      <View style={styles.headerTop}>
+        <TouchableOpacity 
+          style={{ position: 'absolute', left: 16, zIndex: 10 }}
+          onPress={handleExit} 
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <ChevronLeft color="#FFF" size={26} strokeWidth={2.5} />
+        </TouchableOpacity>
+
+        <View style={styles.logoRow}>
+          <Image 
+            source={require('../../../assets/logo.png')} 
+            style={{ height: 32, width: 140 }} 
+            resizeMode="contain" 
+          />
+        </View>
       </View>
-    </Animated.View>
+
+      {/* Thin separator */}
+      <View style={styles.sep} />
+
+      {/* Row 2: Stats left · Actions right */}
+      <View style={styles.headerBottom}>
+        <View style={styles.statsRow}>
+          <Text style={styles.statLabel}>{formatTime(sessionTime)}</Text>
+          <Text style={styles.statLabel}>{currentIndex + 1} Qns</Text>
+          <View style={styles.streakPill}>
+            <Flame color="#FFF" size={14} />
+            <Text style={styles.streakNum}>{streak}</Text>
+          </View>
+        </View>
+
+        <View style={styles.actionsRow}>
+          <TouchableOpacity onPress={handleBookmark} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Bookmark color="#777" size={18} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleChallenge} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Share2 color="#777" size={18} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleReport} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Flag color="#777" size={18} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Second separator */}
+      <View style={styles.sep} />
+    </View>
   );
 
+  // ──────────────────────────────────────────
+  // States: loading / error / exhausted
+  // ──────────────────────────────────────────
+
   const renderExhaustedState = () => (
-    <View style={styles.exhaustedContainer}>
-      <CheckCircle color="#34D399" size={64} style={{ marginBottom: 24 }} />
-      <Text style={styles.exhaustedTitle}>You're all caught up!</Text>
-      <Text style={styles.exhaustedSubtitle}>
-        You've worked through everything available in this chapter right now.
+    <View style={[styles.centeredState, { flex: 1 }]}>
+      <LinearGradient
+        colors={['rgba(128, 238, 193, 0.1)', 'transparent']}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={{
+        alignItems: 'center',
+        padding: 32,
+        backgroundColor: 'rgba(22, 22, 26, 0.8)',
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(128, 238, 193, 0.3)',
+        shadowColor: '#80EEC1',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+        elevation: 10,
+      }}>
+        <Trophy color="#80EEC1" size={64} style={{ marginBottom: 24 }} />
+        <Text style={[styles.stateTitle, { color: '#FFF' }]}>You are a Master Now!</Text>
+        <Text style={[styles.stateSub, { color: '#A1A1AA' }]}>
+          You have successfully conquered all questions available for this concept.
+        </Text>
+        <TouchableOpacity style={styles.primaryBtn} onPress={handleExit}>
+          <Text style={styles.primaryBtnText}>Review Summary</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderErrorState = () => (
+    <View style={styles.centeredState}>
+      <Text style={styles.stateTitle}>Connection Error</Text>
+      <Text style={styles.stateSub}>
+        {errorMsg || "Failed to connect to the backend engine."}
       </Text>
-      
-      <TouchableOpacity style={styles.primaryBtn} onPress={handleExit}>
-        <Text style={styles.primaryBtnText}>Review Summary</Text>
+      <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.goBack()}>
+        <Text style={styles.primaryBtnText}>Go Back</Text>
       </TouchableOpacity>
     </View>
   );
 
-  const renderSummaryModal = () => (
-    <Modal visible={status === 'summary'} animationType="slide" transparent>
+  // ──────────────────────────────────────────
+  // Modals
+  // ──────────────────────────────────────────
+
+  const renderReportModal = () => (
+    <Modal visible={isReportOpen} animationType="slide" transparent>
       <View style={styles.modalBg}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Session Complete</Text>
-          <View style={styles.statsRow}>
-            <View style={styles.statBox}>
-              <Text style={styles.statVal}>{summaryData?.questions_answered}</Text>
-              <Text style={styles.statLbl}>Answered</Text>
-            </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statVal}>{summaryData?.accuracy}%</Text>
-              <Text style={styles.statLbl}>Accuracy</Text>
-            </View>
+        <View style={styles.modalCard}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Text style={styles.modalTitle}>Report Question</Text>
+            <TouchableOpacity onPress={() => setIsReportOpen(false)}>
+              <X color="#777" size={24} />
+            </TouchableOpacity>
           </View>
           
-          {(summaryData?.concepts_mastered.length || 0) > 0 && (
-            <View style={styles.conceptList}>
-              <Text style={styles.conceptListTitle}>Newly Mastered</Text>
-              <Text style={styles.conceptListVal}>{summaryData?.concepts_mastered.length} Concepts</Text>
-            </View>
-          )}
+          <Text style={{ fontFamily: 'Montserrat_600SemiBold', color: '#888', marginBottom: 12 }}>What's wrong?</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {['Answer key looks wrong', 'Typo/unclear wording', 'Diagram broken', 'Duplicate of another question', 'Other'].map(r => (
+              <TouchableOpacity 
+                key={r} 
+                style={{
+                  paddingHorizontal: 12, paddingVertical: 8, borderRadius: 100, borderWidth: 1,
+                  borderColor: reportReason === r ? '#69F0AE' : '#2A2A2E',
+                  backgroundColor: reportReason === r ? 'rgba(105,240,174,0.1)' : '#1A1A1E'
+                }}
+                onPress={() => setReportReason(r)}
+              >
+                <Text style={{ fontFamily: 'Montserrat_600SemiBold', color: reportReason === r ? '#69F0AE' : '#E0E0E0', fontSize: 13 }}>{r}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-          {(summaryData?.concepts_needing_revisit.length || 0) > 0 && (
-            <View style={styles.conceptList}>
-              <Text style={styles.conceptListTitle}>Needs Revisit</Text>
-              <Text style={[styles.conceptListVal, { color: '#E8B84B' }]}>{summaryData?.concepts_needing_revisit.length} Concepts</Text>
-            </View>
+          {reportReason === 'Other' && (
+            <TextInput 
+              style={{ backgroundColor: '#1A1A1E', color: '#FFF', padding: 12, borderRadius: 8, fontFamily: 'Montserrat_500Medium', marginBottom: 16, borderWidth: 1, borderColor: '#2A2A2E' }}
+              placeholder="Any additional details?"
+              placeholderTextColor="#555"
+              value={reportDetails}
+              onChangeText={setReportDetails}
+            />
           )}
+          
+          {reportReason && (
+            <TouchableOpacity style={styles.primaryBtn} onPress={submitReport}>
+              <Text style={styles.primaryBtnText}>Submit Report</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
 
+  const renderSummaryModal = () => (
+    <Modal visible={sessionStatus === 'summary'} animationType="slide" transparent>
+      <View style={styles.modalBg}>
+        <View style={styles.modalCard}>
+          <Text style={styles.modalTitle}>Session Complete</Text>
+          <View style={{ flexDirection: 'row', gap: 12, marginVertical: 20 }}>
+            <View style={styles.summaryStatBox}>
+              <Text style={styles.summaryStatVal}>{summaryData?.questions_answered}</Text>
+              <Text style={styles.summaryStatLbl}>Answered</Text>
+            </View>
+            <View style={styles.summaryStatBox}>
+              <Text style={styles.summaryStatVal}>{summaryData?.accuracy}%</Text>
+              <Text style={styles.summaryStatLbl}>Accuracy</Text>
+            </View>
+          </View>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.primaryBtnText}>Done</Text>
           </TouchableOpacity>
@@ -245,178 +495,323 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
     </Modal>
   );
 
-  if (status === 'loading' && !currentQ) {
+  // ──────────────────────────────────────────
+  // Early returns for non-active states
+  // ──────────────────────────────────────────
+
+  if (sessionStatus === 'loading') {
     return (
       <SafeAreaView style={styles.safeArea}>
-        {renderTopBar()}
+        {renderHeader()}
         <View style={{ flex: 1, justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.primary} size="large" />
+          <ActivityIndicator color="#69F0AE" size="large" />
         </View>
       </SafeAreaView>
     );
   }
 
-  if (status === 'exhausted') {
+  if (sessionStatus === 'error') {
     return (
       <SafeAreaView style={styles.safeArea}>
-        {renderTopBar()}
+        {renderHeader()}
+        {renderErrorState()}
+      </SafeAreaView>
+    );
+  }
+
+  if (sessionStatus === 'exhausted' && feed.length === 0) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        {renderHeader()}
         {renderExhaustedState()}
       </SafeAreaView>
     );
   }
 
-  // Active Question Render
+  // ──────────────────────────────────────────
+  // Main Render: Reel-style FlatList
+  // ──────────────────────────────────────────
+
+  const flatListData = [...feed];
+  const lastItem = feed[feed.length - 1];
+  if (lastItem && lastItem.status === 'answering' && !isProcessingSkip) {
+    flatListData.push({
+      id: 'loading-skip',
+      type: 'loading'
+    });
+  } else if (sessionStatus === 'exhausted' && lastItem && lastItem.status !== 'answering') {
+    flatListData.push({
+      id: 'exhausted-end',
+      type: 'loading'
+    });
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      {renderTopBar()}
-      {renderToast()}
+      {renderHeader()}
+      
+      {!!toastMsg && (
+        <View style={styles.toastWrap} pointerEvents="none">
+          <View style={styles.toastPill}>
+            <Text style={styles.toastText}>{toastMsg}</Text>
+          </View>
+        </View>
+      )}
+
       {renderSummaryModal()}
+      {renderReportModal()}
 
-      <Animated.View 
-        style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
-        {...panResponder.panHandlers}
+      {/* Anti-cheat warning modal */}
+      <Modal visible={showSwitchWarning} animationType="fade" transparent>
+        <View style={styles.modalBg}>
+          <View style={[styles.modalCard, { alignItems: 'center' }]}>
+            <AlertTriangle color="#F59E0B" size={48} style={{ marginBottom: 16 }} />
+            <Text style={[styles.modalTitle, { marginBottom: 8 }]}>Don't switch apps!</Text>
+            <Text style={{ fontFamily: 'Montserrat_500Medium', color: '#999', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>
+              Switching to another app during practice is not allowed. If you do it again, your session will end automatically.
+            </Text>
+            <TouchableOpacity 
+              style={styles.primaryBtn} 
+              onPress={() => setShowSwitchWarning(false)}
+            >
+              <Text style={styles.primaryBtnText}>Continue Practicing</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <View 
+        style={{ flex: 1, overflow: 'hidden' }} 
+        onLayout={(e) => setCardHeight(e.nativeEvent.layout.height)}
       >
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {currentQ && (
-          <>
-            <MathText content={currentQ.prompt} style={styles.questionText} />
-
-            <View style={styles.optionsList}>
-              {currentQ.options?.map((opt, index) => {
-                const isSelected = selectedOption === index;
-                const isAnswering = status === 'answering';
-                const isCorrect = status === 'correct' || status === 'incorrect';
-                
-                // We mock knowing the correct index purely for styling during the 'incorrect' state
-                // In reality, the server tells us if it was correct. If we want to highlight the correct answer,
-                // the server should return the correct index in the solution payload.
-                // Assuming `isCorrectOption` is passed or can be inferred (using a mock fallback here).
-                const isCorrectOption = (status === 'incorrect' || status === 'correct') && index === (currentQ as any).correctIndex;
-
-                let bgColor = colors.surface;
-                let borderColor = colors.border;
-                
-                if (isCorrectOption && !isAnswering) {
-                  bgColor = '#34D39915';
-                  borderColor = '#34D399';
-                } else if (isSelected && status === 'incorrect') {
-                  bgColor = colors.surfaceLight;
-                  borderColor = colors.border; // neutral tone per rules (no red-heavy punitive styling)
-                } else if (isSelected && isAnswering) {
-                  borderColor = colors.primary;
-                }
-
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.optionBtn, { backgroundColor: bgColor, borderColor }]}
-                    onPress={() => handleSelect(index)}
-                    activeOpacity={0.7}
-                    disabled={!isAnswering}
-                  >
-                    <MathText content={opt} style={styles.optionText} />
-                    {isCorrectOption && !isAnswering && <CheckCircle color="#34D399" size={20} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {status === 'incorrect' && answerData?.solution && (
-              <View style={styles.solutionBox}>
-                <Text style={styles.solutionTitle}>Solution</Text>
-                {answerData.solution.misconception_tag && (
-                  <View style={styles.misconceptionBox}>
-                    <Text style={styles.misconceptionText}>💡 {answerData.solution.misconception_tag}</Text>
+        {cardHeight > 0 && (
+          <FlatList
+            ref={flatListRef}
+            data={flatListData}
+            keyExtractor={item => item.id}
+            showsVerticalScrollIndicator={false}
+            pagingEnabled
+            snapToInterval={cardHeight}
+            decelerationRate="fast"
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            renderItem={({ item }) => (
+              <View style={{ height: cardHeight }}>
+                {item.type === 'question' && item.question ? (
+                  <QuestionCard
+                    question={item.question}
+                    status={item.status as any}
+                    selectedOption={item.selectedOption ?? null}
+                    answerData={item.answerData ?? null}
+                    masteryLevel={Math.max(10, accuracy)}
+                    onSelect={handleSelect}
+                    onSubmit={handleSubmit}
+                    onSkip={() => {}}
+                    onBookmark={handleBookmark}
+                    onReport={handleReport}
+                    onChallenge={handleChallenge}
+                  />
+                ) : (
+                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    {item.id === 'exhausted-end' ? (
+                      <View style={{
+                        alignItems: 'center',
+                        padding: 32,
+                        backgroundColor: 'rgba(22, 22, 26, 0.8)',
+                        borderRadius: 24,
+                        borderWidth: 1,
+                        borderColor: 'rgba(128, 238, 193, 0.3)',
+                        shadowColor: '#80EEC1',
+                        shadowOffset: { width: 0, height: 0 },
+                        shadowOpacity: 0.5,
+                        shadowRadius: 20,
+                        elevation: 10,
+                        margin: 20,
+                      }}>
+                        <Trophy color="#80EEC1" size={56} style={{ marginBottom: 24 }} />
+                        <Text style={{ color: '#FFF', fontFamily: 'Montserrat_700Bold', fontSize: 24, textAlign: 'center', marginBottom: 12 }}>You are a Master Now!</Text>
+                        <Text style={{ color: '#A1A1AA', fontFamily: 'Montserrat_500Medium', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
+                          You have successfully conquered all questions available for this concept.
+                        </Text>
+                        <TouchableOpacity style={[styles.primaryBtn, { marginTop: 24, width: '100%' }]} onPress={handleExit}>
+                          <Text style={styles.primaryBtnText}>Review Summary</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <>
+                        <ActivityIndicator color="#69F0AE" size="large" />
+                        <Text style={{ marginTop: 16, color: '#777', fontFamily: 'Montserrat_600SemiBold' }}>Fetching next question...</Text>
+                      </>
+                    )}
                   </View>
                 )}
-                {answerData.solution.steps.map((step, i) => (
-                  <MathText key={i} content={`${i + 1}. ${step}`} style={styles.solutionText} />
-                ))}
               </View>
             )}
-          </>
-        )}
-        </ScrollView>
-      </Animated.View>
-
-      {/* Bottom Action Row */}
-      <View style={styles.footer}>
-        {status === 'answering' && (
-          <>
-            <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-              <Text style={styles.skipText}>I don't know / Skip</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.submitBtn, selectedOption === null && { opacity: 0.5 }]} 
-              onPress={handleSubmit}
-              disabled={selectedOption === null}
-            >
-              <Text style={styles.submitBtnText}>Submit</Text>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {status === 'incorrect' && (
-          <View style={styles.swipeHintContainer}>
-            <Text style={styles.swipeHintText}>Swipe up for next question</Text>
-          </View>
+          />
         )}
       </View>
     </SafeAreaView>
   );
 }
 
+// ──────────────────────────────────────────
+// Styles — pixel-matched to screenshot
+// ──────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  closeBtn: { padding: 4 },
-  headerTitleContainer: { alignItems: 'center' },
-  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  headerSubtitle: { color: colors.textSecondary, fontSize: 12, fontWeight: '500', marginTop: 2 },
-  
-  container: { flex: 1 },
-  content: { padding: 20, paddingBottom: 40 },
-  
-  questionText: { color: colors.text, fontSize: 18, lineHeight: 28, fontWeight: '500', marginBottom: 24 },
-  
-  optionsList: { gap: 12 },
-  optionBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderRadius: 12, borderWidth: 1 },
-  optionText: { color: colors.text, fontSize: 16, flex: 1, marginRight: 12 },
-  
-  solutionBox: { marginTop: 24, padding: 16, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  solutionTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12 },
-  solutionText: { color: colors.textSecondary, fontSize: 14, lineHeight: 22, marginBottom: 8 },
-  misconceptionBox: { backgroundColor: '#9B6FFF15', padding: 12, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#9B6FFF30' },
-  misconceptionText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
-  
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
-  skipBtn: { padding: 12 },
-  skipText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
-  submitBtn: { backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 100 },
-  submitBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
-  
-  swipeHintContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
-  swipeHintText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600', letterSpacing: 0.5 },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
 
-  toastContainer: { position: 'absolute', top: 70, left: 0, right: 0, alignItems: 'center', zIndex: 100 },
-  toastInner: { backgroundColor: colors.surfaceElevated, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100, borderWidth: 1, borderColor: colors.border },
-  toastText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  // ── Header ──
+  headerWrap: {
+    backgroundColor: '#000',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center', // Center logo
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    minHeight: 56,
+  },
+  logoRow: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sep: {
+    height: 1,
+    backgroundColor: '#222',
+  },
+  headerBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  statLabel: {
+    fontFamily: 'Montserrat_600SemiBold',
+    color: '#999',
+    fontSize: 15,
+  },
+  streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  streakNum: {
+    fontFamily: 'Montserrat_700Bold',
+    color: '#FFF',
+    fontSize: 15,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+  },
 
-  exhaustedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  exhaustedTitle: { color: colors.text, fontSize: 24, fontWeight: '700', marginBottom: 12 },
-  exhaustedSubtitle: { color: colors.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  primaryBtn: { backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 100, width: '100%', alignItems: 'center' },
-  primaryBtnText: { color: '#000', fontSize: 16, fontWeight: '700' },
+  // ── States ──
+  centeredState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  stateTitle: {
+    fontFamily: 'Montserrat_800ExtraBold',
+    color: '#FFF',
+    fontSize: 24,
+    marginBottom: 12,
+  },
+  stateSub: {
+    fontFamily: 'Montserrat_600SemiBold',
+    color: '#888',
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
 
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  summaryCard: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 48 },
-  summaryTitle: { color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: 24, textAlign: 'center' },
-  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  statBox: { flex: 1, backgroundColor: colors.surfaceLight, padding: 16, borderRadius: 12, alignItems: 'center' },
-  statVal: { color: colors.text, fontSize: 24, fontWeight: '700', marginBottom: 4 },
-  statLbl: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
-  conceptList: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border, marginBottom: 12 },
-  conceptListTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  conceptListVal: { color: colors.success, fontSize: 15, fontWeight: '700' }
+  // ── Buttons ──
+  primaryBtn: {
+    backgroundColor: '#69F0AE',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 100,
+    width: '100%',
+    alignItems: 'center',
+  },
+  primaryBtnText: {
+    fontFamily: 'Montserrat_800ExtraBold',
+    color: '#000',
+    fontSize: 16,
+  },
+
+  // ── Toast ──
+  toastWrap: {
+    position: 'absolute',
+    top: 140,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  toastPill: {
+    backgroundColor: '#1A1A1E',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: '#2A2A2E',
+  },
+  toastText: {
+    fontFamily: 'Montserrat_700Bold',
+    color: '#FFF',
+    fontSize: 13,
+  },
+
+  // ── Modals ──
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#111',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 48,
+  },
+  modalTitle: {
+    fontFamily: 'Montserrat_800ExtraBold',
+    color: '#FFF',
+    fontSize: 22,
+    textAlign: 'center',
+  },
+  summaryStatBox: {
+    flex: 1,
+    backgroundColor: '#1A1A1E',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  summaryStatVal: {
+    fontFamily: 'Montserrat_800ExtraBold',
+    color: '#FFF',
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  summaryStatLbl: {
+    fontFamily: 'Montserrat_600SemiBold',
+    color: '#888',
+    fontSize: 13,
+  },
 });

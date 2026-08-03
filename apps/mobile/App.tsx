@@ -12,6 +12,7 @@ import {
   Nunito_800ExtraBold,
   Nunito_900Black 
 } from '@expo-google-fonts/nunito';
+
 import AppNavigator from './src/navigation/AppNavigator';
 import Toast from './src/components/Toast';
 import { View, ActivityIndicator } from 'react-native';
@@ -27,7 +28,8 @@ export default function App() {
         Nunito_600SemiBold,
         Nunito_700Bold,
         Nunito_800ExtraBold,
-        Nunito_900Black
+        Nunito_900Black,
+
       });
       setFontsLoaded(true);
     }

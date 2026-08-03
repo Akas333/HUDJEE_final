@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import IRTEstimateRequest, SessionStartRequest, SessionStartResponse, AnswerSubmitRequest, AnswerSubmitResponse, SkipRequest, SkipResponse
+from app.models.schemas import IRTEstimateRequest, SessionStartRequest, SessionStartResponse, AnswerSubmitRequest, AnswerSubmitResponse, SkipRequest, SkipResponse, ReportRequest
 from app.services.irt import estimate_theta, select_next_question, get_initial_theta
 from app.db.supabase import get_supabase
 import uuid
@@ -31,18 +31,69 @@ def compute_irt(request: IRTEstimateRequest):
 @router.post("/session/start", response_model=SessionStartResponse)
 def start_session(request: SessionStartRequest):
     sb = get_supabase()
-    # Fetch questions for the chapter
-    res = sb.table("questions").select("*").eq("chapter_id", request.chapter_id).execute()
+    
+    try:
+        uuid.UUID(request.chapter_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid chapter ID. Are you using mock data? Please navigate from a real chapter in the app.")
+        
+    # Fetch questions for the chapter/concept
+    query = sb.table("questions").select("*").eq("chapter_id", request.chapter_id).eq("published", True)
+    if request.concept_id:
+        query = query.eq("concept_id", request.concept_id)
+    try:
+        res = query.execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Supabase fetch questions error: {e}")
+        
     questions = res.data
     if not questions:
         raise HTTPException(status_code=404, detail="No questions found for this chapter")
+        
+    excluded_q_ids = set()
+    if request.user_id and request.user_id != 'anonymous':
+        try:
+            uuid.UUID(request.user_id)
+            history_res = sb.table("answer_events").select("question_id").eq("user_id", request.user_id).eq("is_correct", True).execute()
+            excluded_q_ids = {e["question_id"] for e in history_res.data}
+        except ValueError:
+            pass
+            
+    filtered_questions = [q for q in questions if q["id"] not in excluded_q_ids]
+    
+    session_id = str(uuid.uuid4())
+    session_data = {
+        "id": session_id,
+        "config": {"chapter_id": request.chapter_id, "concept_id": request.concept_id},
+        "status": "active",
+        "adaptive_mode": True
+    }
+    
+    if request.user_id and request.user_id != 'anonymous':
+        try:
+            uuid.UUID(request.user_id)
+            session_data["user_id"] = request.user_id
+        except ValueError:
+            pass
+
+    try:
+        sb.table("sessions").insert(session_data).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create session in DB: {e}")
+
+    if not filtered_questions:
+        return {
+            "session_id": session_id,
+            "first_question": None,
+            "exhausted": True
+        }
     
     initial_theta = get_initial_theta()
     
     # Format for select_next_question: List[Tuple[int, float, float, float]]
     available_items = [
         (q["id"], q.get("irt_discrimination", 1.0) or 1.0, q.get("irt_difficulty", 0.0) or 0.0, q.get("irt_guessing", 0.0) or 0.0)
-        for q in questions
+        for q in filtered_questions
     ]
     
     try:
@@ -50,16 +101,7 @@ def start_session(request: SessionStartRequest):
     except Exception:
         next_q_id = available_items[0][0]
         
-    first_q = next((q for q in questions if q["id"] == next_q_id), questions[0])
-    
-    session_id = str(uuid.uuid4())
-    sb.table("sessions").insert({
-        "id": session_id,
-        "user_id": request.user_id,
-        "config": {"chapter_id": request.chapter_id},
-        "status": "active",
-        "adaptive_mode": True
-    }).execute()
+    first_q = next((q for q in filtered_questions if q["id"] == next_q_id), filtered_questions[0])
     
     return {
         "session_id": session_id,
@@ -68,8 +110,9 @@ def start_session(request: SessionStartRequest):
             "concept_id": first_q.get("concept_id", ""),
             "type": first_q["format"],
             "prompt": first_q["question_body"],
-            "options": [o["text"] for o in first_q.get("options", [])] if first_q.get("options") else None,
-        }
+            "options": first_q.get("options") if isinstance(first_q.get("options"), dict) else ([o["text"] for o in first_q.get("options", [])] if first_q.get("options") else None),
+        },
+        "exhausted": False
     }
 
 @router.post("/session/answer", response_model=AnswerSubmitResponse)
@@ -80,13 +123,21 @@ def submit_answer(request: AnswerSubmitRequest):
         raise HTTPException(status_code=404, detail="Question not found")
     q = q_res.data[0]
     
-    sb.table("answer_events").insert({
+    answer_data = {
         "session_id": request.session_id,
-        "user_id": request.user_id,
         "question_id": request.question_id,
         "is_correct": request.is_correct,
         "time_taken_ms": request.time_taken_ms
-    }).execute()
+    }
+    
+    if request.user_id and request.user_id != 'anonymous':
+        try:
+            uuid.UUID(request.user_id)
+            answer_data["user_id"] = request.user_id
+        except ValueError:
+            pass
+            
+    sb.table("answer_events").insert(answer_data).execute()
     
     events_res = sb.table("answer_events").select("question_id, is_correct").eq("session_id", request.session_id).execute()
     q_ids = [e["question_id"] for e in events_res.data]
@@ -115,11 +166,27 @@ def submit_answer(request: AnswerSubmitRequest):
     if isinstance(config, str):
         config = json.loads(config)
     chapter_id = config.get("chapter_id")
+    concept_id = config.get("concept_id")
     
-    all_qs_res = sb.table("questions").select("*").eq("chapter_id", chapter_id).execute()
+    query = sb.table("questions").select("*").eq("chapter_id", chapter_id).eq("published", True)
+    if concept_id:
+        query = query.eq("concept_id", concept_id)
+        
+    all_qs_res = query.execute()
     all_qs = all_qs_res.data
     
-    available_qs = [aq for aq in all_qs if aq["id"] not in q_ids]
+    historical_correct_q_ids = set()
+    if request.user_id and request.user_id != 'anonymous':
+        try:
+            uuid.UUID(request.user_id)
+            hist_res = sb.table("answer_events").select("question_id").eq("user_id", request.user_id).eq("is_correct", True).execute()
+            historical_correct_q_ids = {e["question_id"] for e in hist_res.data}
+        except ValueError:
+            pass
+            
+    excluded_q_ids = set(q_ids).union(historical_correct_q_ids)
+    
+    available_qs = [aq for aq in all_qs if aq["id"] not in excluded_q_ids]
     
     next_q_dict = None
     exhausted = False
@@ -138,7 +205,7 @@ def submit_answer(request: AnswerSubmitRequest):
                 "concept_id": next_q.get("concept_id", ""),
                 "type": next_q["format"],
                 "prompt": next_q["question_body"],
-                "options": [o["text"] for o in next_q.get("options", [])] if next_q.get("options") else None,
+                "options": next_q.get("options") if isinstance(next_q.get("options"), dict) else ([o["text"] for o in next_q.get("options", [])] if next_q.get("options") else None),
             }
         except ValueError:
             exhausted = True
@@ -155,6 +222,31 @@ def submit_answer(request: AnswerSubmitRequest):
         "chapter_exhausted": exhausted
     }
 
+@router.post("/session/report")
+def report_question(request: ReportRequest):
+    sb = get_supabase()
+    data = {
+        "question_id": request.question_id,
+        "reason": request.reason,
+        "details": request.details
+    }
+    
+    # Gracefully handle 'anonymous' UUID errors
+    if request.user_id and request.user_id != 'anonymous':
+        # Validate if it's a UUID format to prevent DB crash
+        try:
+            uuid.UUID(request.user_id)
+            data["user_id"] = request.user_id
+        except ValueError:
+            pass
+
+    try:
+        sb.table("question_reports").insert(data).execute()
+        return {"success": True}
+    except Exception as e:
+        print("ERROR REPORTING:", str(e))
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
 @router.post("/session/skip", response_model=SkipResponse)
 def skip_question(request: SkipRequest):
     sb = get_supabase()
@@ -166,10 +258,27 @@ def skip_question(request: SkipRequest):
     if isinstance(config, str):
         config = json.loads(config)
     chapter_id = config.get("chapter_id")
+    concept_id = config.get("concept_id")
     
-    all_qs_res = sb.table("questions").select("*").eq("chapter_id", chapter_id).execute()
+    query = sb.table("questions").select("*").eq("chapter_id", chapter_id).eq("published", True)
+    if concept_id:
+        query = query.eq("concept_id", concept_id)
+        
+    all_qs_res = query.execute()
     all_qs = all_qs_res.data
-    available_qs = [aq for aq in all_qs if aq["id"] not in q_ids]
+    
+    historical_correct_q_ids = set()
+    if request.user_id and request.user_id != 'anonymous':
+        try:
+            uuid.UUID(request.user_id)
+            hist_res = sb.table("answer_events").select("question_id").eq("user_id", request.user_id).eq("is_correct", True).execute()
+            historical_correct_q_ids = {e["question_id"] for e in hist_res.data}
+        except ValueError:
+            pass
+            
+    excluded_q_ids = set(q_ids).union(historical_correct_q_ids)
+    
+    available_qs = [aq for aq in all_qs if aq["id"] not in excluded_q_ids]
     
     next_q_dict = None
     exhausted = False
@@ -182,7 +291,7 @@ def skip_question(request: SkipRequest):
             "concept_id": next_q.get("concept_id", ""),
             "type": next_q["format"],
             "prompt": next_q["question_body"],
-            "options": [o["text"] for o in next_q.get("options", [])] if next_q.get("options") else None,
+            "options": next_q.get("options") if isinstance(next_q.get("options"), dict) else ([o["text"] for o in next_q.get("options", [])] if next_q.get("options") else None),
         }
         
     return {
