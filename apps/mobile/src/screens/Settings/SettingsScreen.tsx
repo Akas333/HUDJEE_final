@@ -6,9 +6,25 @@ import { SettingsRow } from '../../components/settings/SettingsRow';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { User, Bell, Sliders, Shield, Database, HelpCircle, Info, LogOut } from 'lucide-react-native';
+import { signOut } from '../../lib/googleAuth';
+import { useToastStore } from '../../services/ToastService';
 
 export function SettingsScreen() {
   const navigation = useNavigation<any>();
+  const showToast = useToastStore((s) => s.showToast);
+  const [signingOut, setSigningOut] = React.useState(false);
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      // AppNavigator swaps back to the Auth stack via onAuthStateChange.
+    } catch (e: any) {
+      showToast(e?.message ?? 'Could not sign out. Please try again.', 'error');
+      setSigningOut(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -54,8 +70,8 @@ export function SettingsScreen() {
         <View style={styles.divider} />
         <SettingsRow 
           icon={<LogOut size={24} color={colors.amberRisk || '#FBBF24'} />}
-          title="Sign Out"
-          onPress={() => {/* handle sign out */}}
+          title={signingOut ? 'Signing Out…' : 'Sign Out'}
+          onPress={handleSignOut}
           textColor={colors.amberRisk || '#FBBF24'}
           iconColor={colors.amberRisk || '#FBBF24'}
         />

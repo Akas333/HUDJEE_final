@@ -55,6 +55,42 @@ Env files are gitignored and must be created locally.
   Note the engine reads `SUPABASE_SERVICE_KEY` for requests and `SUPABASE_SERVICE_ROLE_KEY`
   in the calibration job — set both.
 
+## Auth
+
+Google is the only sign-in method. `apps/mobile/src/lib/googleAuth.ts` has two paths behind one
+`signInWithGoogle()`:
+
+- **Native** (`@react-native-google-signin/google-signin` → `supabase.auth.signInWithIdToken`) —
+  the in-app account picker. Needs a development build.
+- **Browser fallback** (`signInWithOAuth` → `WebBrowser` → `createSessionFromUrl`) — used in
+  Expo Go, which cannot load the native module.
+
+The module is chosen at runtime by `getGoogleSignin()`. Its `require` is lazy and guarded on
+purpose: importing it at module scope in Expo Go throws mid-bundle-evaluation and takes down the
+whole app instead of just the sign-in button. Native is used only when *not* in Expo Go **and**
+`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` is set; otherwise it falls back silently.
+
+`signOut()` clears Google's native session as well as Supabase's — without that half, Google
+silently reuses the same account forever and sign-out looks broken.
+
+Setup, none of which is in the repo:
+
+1. **Google Cloud** → Credentials → three OAuth clients: **Web** (its ID goes in
+   `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` — the ID token's audience is always the web client, on every
+   platform), **Android** (package name + signing SHA-1; never referenced in code), and **iOS**
+   (`EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, which `app.config.js` reverses into the required
+   `iosUrlScheme`).
+2. **Supabase** → Authentication → Providers → Google: enable it and add the client IDs. Until
+   this is done every attempt returns
+   `{"code":400,"error_code":"validation_failed","msg":"Unsupported provider: provider is not enabled"}`.
+3. **Supabase** → Authentication → URL Configuration → Redirect URLs: add `hudjee://auth/callback`
+   plus the `exp://<LAN-IP>:8081/--/auth/callback` form Expo Go generates. Browser fallback only —
+   the native flow needs neither, and the Expo Go URL changes with your network.
+
+`app.config.js` extends `app.json` (static config still lives there) and adds the Google config
+plugin only when an iOS client ID exists — the plugin throws on a missing `iosUrlScheme`, which
+would otherwise break prebuild before the credentials exist.
+
 ## Commands
 
 ```bash
