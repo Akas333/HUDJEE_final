@@ -47,7 +47,11 @@ export default function DashboardScreen({ navigation }: any) {
     const interval = setInterval(() => {
       setActiveIndex((prevIndex) => {
         if (cardsData.length === 0) return 0;
-        const nextIndex = (prevIndex + 1) % cardsData.length;
+        
+        // Prevent NaN from getting propagated and causing a crash in scrollTo
+        const safePrevIndex = isNaN(prevIndex) ? 0 : prevIndex;
+        const nextIndex = (safePrevIndex + 1) % cardsData.length;
+        
         if (scrollViewRef.current) {
           scrollViewRef.current.scrollTo({ x: nextIndex * CARD_WIDTH, animated: true });
         }
@@ -60,7 +64,11 @@ export default function DashboardScreen({ navigation }: any) {
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
+    if (!slideSize) return; // Prevent division by zero
+    
     const index = event.nativeEvent.contentOffset.x / slideSize;
+    if (isNaN(index)) return; // Prevent NaN propagation
+    
     const roundIndex = Math.round(index);
     if (roundIndex !== activeIndex) {
       setActiveIndex(roundIndex);
