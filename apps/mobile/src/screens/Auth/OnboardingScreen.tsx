@@ -26,9 +26,9 @@ export default function OnboardingScreen({ navigation }: any) {
       })
     ]).start();
 
-    // Navigate to SignInScreen after 3 seconds
+    // Navigate to the Google sign-in screen after 3 seconds
     const timer = setTimeout(() => {
-      navigation.replace('SignInScreen');
+      navigation.replace('AuthScreen');
     }, 3000);
 
     return () => clearTimeout(timer);
