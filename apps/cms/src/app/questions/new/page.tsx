@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Toast } from '@/components/Toast';
 import { ImageIcon, Wand2, Loader2 } from 'lucide-react';
+import WatermarkImage from '@/components/WatermarkImage';
 
 function NewQuestionForm() {
   const router = useRouter();
@@ -508,7 +509,7 @@ function NewQuestionForm() {
                     </div>
                     {opt.image_url && (
                       <div className="ml-16 relative w-fit">
-                        <img src={opt.image_url} alt="Option image" className="h-16 rounded border border-[#333] object-contain" />
+                        <WatermarkImage src={opt.image_url} alt="Option image" className="h-16 rounded border border-[#333] object-contain" />
                         <button type="button" onClick={() => {
                           const newOpts = [...options];
                           delete newOpts[i].image_url;
