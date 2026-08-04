@@ -40,7 +40,7 @@ function NewQuestionForm() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
-  const [options, setOptions] = useState([{ id: '1', text: '' }, { id: '2', text: '' }]);
+  const [options, setOptions] = useState<{ id: string; text: string; image_url?: string }[]>([{ id: '1', text: '' }, { id: '2', text: '' }]);
   
   // Matrix specific state
   const [matrixLeft, setMatrixLeft] = useState([{ id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' }]);
