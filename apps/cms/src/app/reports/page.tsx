@@ -15,9 +15,13 @@ export default function ReportsPage() {
     try {
       const res = await fetch(`/api/reports?status=${statusFilter}`);
       const data = await res.json();
-      setReports(data || []);
+      if (!res.ok) {
+        console.error('API Error:', data);
+      }
+      setReports(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('Failed to fetch reports', e);
+      setReports([]);
     } finally {
       setLoading(false);
     }
