@@ -76,10 +76,17 @@ The engine uses a local venv at `services/engine/.venv` (Python 3.14).
 - Both app-level `AGENTS.md` files exist for a reason: this Next.js (16) and this Expo (SDK 57)
   differ from older training data. Check `node_modules/next/dist/docs/` and
   `https://docs.expo.dev/versions/v57.0.0/` before writing framework code.
-- Root `package.json` pins `react-native-worklets`, `react-native-svg`, and
-  `react-native-safe-area-context` via `overrides` — Expo Go crashes on version mismatch, so
-  don't bump them casually. `apps/mobile/babel.config.js` must keep
-  `react-native-reanimated/plugin` last.
+- `react-native-worklets` must stay at **0.10.0** in three places at once: the root
+  `dependencies`, the root `overrides`, and `apps/mobile/dependencies`. Expo Go ships a fixed
+  native worklets build, so the JS cannot move ahead of it. The root dependency exists to force
+  hoisting — Metro resolves worklets from `apps/mobile` while `react-native-reanimated/plugin`
+  resolves it from the root, and if the two land on different copies you get
+  `[Worklets] Mismatch between JavaScript code version and Worklets Babel plugin version`
+  at startup. After touching any of them, verify with `npm ls react-native-worklets` that a
+  single copy resolves and nothing is flagged `invalid`.
+- Root `overrides` also pins `react-native-svg` and `react-native-safe-area-context`; Expo Go
+  crashes on version mismatch, so don't bump them casually.
+  `apps/mobile/babel.config.js` must keep `react-native-reanimated/plugin` last.
 - Question and solution bodies are LaTeX; the CMS renders with KaTeX (`remark-math` +
   `rehype-katex`) and the app with `MathText`.
 - CMS reads go through the anon/publishable client in `src/lib/supabase.ts`; all writes and
