@@ -172,6 +172,35 @@ function NewQuestionForm() {
     fetchChapters();
   }, [formData.subject]);
 
+  const handleImagePaste = async (e: React.ClipboardEvent, onUploadSuccess: (url: string) => void) => {
+    const items = e.clipboardData.items;
+    const imageItem = Array.from(items).find(item => item.type.startsWith('image/'));
+    
+    if (imageItem) {
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (!file) return;
+
+      setIsUploadingImage(true);
+      setToast({ message: 'Uploading pasted image...', type: 'success' });
+      
+      try {
+        const fd = new FormData();
+        fd.append('image', file);
+        const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        
+        onUploadSuccess(data.url);
+        setToast({ message: 'Pasted image uploaded successfully!', type: 'success' });
+      } catch (err: any) {
+        setToast({ message: err.message, type: 'error' });
+      } finally {
+        setIsUploadingImage(false);
+      }
+    }
+  };
+
   useEffect(() => {
     if (formData.chapter_id) fetchTopics(formData.chapter_id);
     else setTopics([]);
@@ -384,7 +413,7 @@ function NewQuestionForm() {
               />
             </label>
           </div>
-          <textarea required rows={6} value={formData.question_body} onBlur={() => pushHistory(formData, options)} onChange={e => setFormData({...formData, question_body: e.target.value})} className="w-full p-4 bg-[#141416] border border-[#333] text-white rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Write question content here..."></textarea>
+          <textarea required rows={6} value={formData.question_body} onBlur={() => pushHistory(formData, options)} onChange={e => setFormData({...formData, question_body: e.target.value})} onPaste={(e) => handleImagePaste(e, (url) => setFormData({...formData, question_body: formData.question_body + `\n![image](${url})\n`}))} className="w-full p-4 bg-[#141416] border border-[#333] text-white rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Write question content here..."></textarea>
           
           {/* AI Evaluation Button */}
           <div className="mt-4 flex flex-col md:flex-row gap-4 items-start md:items-center p-4 bg-[#1a1a1c] border border-[#262626] rounded-xl">
@@ -480,7 +509,11 @@ function NewQuestionForm() {
                         const newOpts = [...options];
                         newOpts[i].text = e.target.value;
                         setOptions(newOpts);
-                      }} className="flex-1 p-2.5 bg-[#141416] border border-[#333] text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder={`Option text`} />
+                      }} onPaste={(e) => handleImagePaste(e, (url) => {
+                        const newOpts = [...options];
+                        newOpts[i].image_url = url;
+                        setOptions(newOpts);
+                      })} className="flex-1 p-2.5 bg-[#141416] border border-[#333] text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder={`Option text`} />
                       
                       <label className="cursor-pointer text-zinc-400 hover:text-[#8692f7] p-2 transition-colors">
                         <ImageIcon size={18} />
@@ -637,7 +670,7 @@ function NewQuestionForm() {
 
         <div>
           <label className="block text-sm font-medium text-zinc-400 mb-2">Solution</label>
-          <textarea rows={4} value={formData.solution} onBlur={() => pushHistory(formData, options)} onChange={e => setFormData({...formData, solution: e.target.value})} className="w-full p-4 bg-[#141416] border border-[#333] text-white rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Write solution here..."></textarea>
+          <textarea rows={4} value={formData.solution} onBlur={() => pushHistory(formData, options)} onChange={e => setFormData({...formData, solution: e.target.value})} onPaste={(e) => handleImagePaste(e, (url) => setFormData({...formData, solution: formData.solution + `\n![image](${url})\n`}))} className="w-full p-4 bg-[#141416] border border-[#333] text-white rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Write solution here..."></textarea>
         </div>
 
         <div className="flex items-center gap-3">
