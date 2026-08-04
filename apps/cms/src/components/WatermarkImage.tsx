@@ -12,8 +12,9 @@ interface WatermarkImageProps extends React.ImgHTMLAttributes<HTMLImageElement> 
 export default function WatermarkImage({ src, alt, containerClassName = '', className, ...props }: WatermarkImageProps) {
   const { profile, user } = useAuth();
   
-  // Use profile username if available, fallback to email, then fallback to 'HUDJEE'
-  const watermarkText = profile?.username || user?.email || 'HUDJEE';
+  // In the CMS, we just show a placeholder so authors understand how it will look for students.
+  // In the mobile app, this will be replaced with the actual student's email/username.
+  const watermarkText = 'student@example.com';
 
   return (
     <div className={`relative inline-block overflow-hidden rounded-md border border-zinc-800 ${containerClassName}`}>
