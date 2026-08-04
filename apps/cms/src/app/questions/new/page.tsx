@@ -144,6 +144,8 @@ function NewQuestionForm() {
         correct_answer: data.correct_answer || '',
         solution: data.solution || '',
         published: data.published || false,
+        author_difficulty_bucket: data.author_difficulty_bucket || '',
+        author_prior_b: data.author_prior_b || 0,
       });
       if (data.options && Array.isArray(data.options)) {
         setOptions(data.options);
