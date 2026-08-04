@@ -11,10 +11,10 @@
     "react-native-worklets": "Hoisted to the root on purpose: Metro resolves it from apps/mobile while the reanimated Babel plugin resolves it from the root. If it is only a workspace dep, npm nests it under apps/mobile and the two disagree (or the plugin fails to resolve it at all). Keep this and the override on the same version."
   },
   "dependencies": {
-    "react-native-worklets": "0.10.0"
+    "react-native-worklets": "0.10.3"
   },
   "overrides": {
-    "react-native-worklets": "0.10.0",
+    "react-native-worklets": "0.10.3",
     "react-native-svg": "15.15.4",
     "react-native-safe-area-context": "5.7.0"
   }

@@ -76,14 +76,25 @@ The engine uses a local venv at `services/engine/.venv` (Python 3.14).
 - Both app-level `AGENTS.md` files exist for a reason: this Next.js (16) and this Expo (SDK 57)
   differ from older training data. Check `node_modules/next/dist/docs/` and
   `https://docs.expo.dev/versions/v57.0.0/` before writing framework code.
-- `react-native-worklets` must stay at **0.10.0** in three places at once: the root
-  `dependencies`, the root `overrides`, and `apps/mobile/dependencies`. Expo Go ships a fixed
-  native worklets build, so the JS cannot move ahead of it. The root dependency exists to force
-  hoisting — Metro resolves worklets from `apps/mobile` while `react-native-reanimated/plugin`
-  resolves it from the root, and if the two land on different copies you get
-  `[Worklets] Mismatch between JavaScript code version and Worklets Babel plugin version`
-  at startup. After touching any of them, verify with `npm ls react-native-worklets` that a
-  single copy resolves and nothing is flagged `invalid`.
+- `react-native-worklets` must stay at **0.10.3** in four places at once: the root
+  `dependencies`, the root `overrides`, `apps/mobile/dependencies`, and the resolved entry in
+  `package-lock.json`. Getting this wrong produces one of two startup failures:
+  - Two copies installed (root vs `apps/mobile`) → red screen,
+    `[Worklets] Mismatch between JavaScript code version and Worklets Babel plugin version`.
+    Metro bundles the app's copy while the Babel plugin loads the root one. The lockfile can
+    pin a stale root copy on its own — npm marks it `invalid` but will not fix it, so a
+    `package.json` edit alone is not enough.
+  - A single copy, but at **0.10.0** → native `SIGSEGV` in `libworklets.so` on the `mqt_v_js`
+    thread the moment any reanimated component mounts. The app closes instantly with no red
+    screen. **Do not "fix" this by trusting `expo/bundledNativeModules.json`** — it lists
+    `0.10.0` for SDK 57, but the shipped Expo Go 57.0.3 binary is built against 0.10.3.
+    Verified empirically on the emulator: 0.10.0 segfaults, 0.10.3 boots.
+  - The root `dependencies` entry exists to force hoisting: Metro resolves worklets from
+    `apps/mobile`, the Babel plugin resolves it from the root, and as a workspace-only dep npm
+    nests it where the plugin cannot see it (`MODULE_NOT_FOUND`).
+  - After touching any of them, run `npm ls react-native-worklets` — exactly one copy, nothing
+    flagged `invalid` — and boot the app once, since neither typecheck nor `expo export`
+    catches the native segfault.
 - Root `overrides` also pins `react-native-svg` and `react-native-safe-area-context`; Expo Go
   crashes on version mismatch, so don't bump them casually.
   `apps/mobile/babel.config.js` must keep `react-native-reanimated/plugin` last.
