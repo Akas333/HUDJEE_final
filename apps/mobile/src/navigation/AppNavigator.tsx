@@ -46,16 +46,21 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Auth" screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
-        <Stack.Screen name="Auth" component={AuthNavigator} />
-        <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
-        <Stack.Screen name="TestAnalysisStack" component={TestAnalysisNavigator} />
-        <Stack.Screen name="SettingsStack" component={SettingsNavigator} />
-        <Stack.Screen 
-          name="AdaptiveSessionScreen" 
-          component={AdaptiveSessionScreen} 
-          options={{ animation: 'slide_from_bottom', gestureEnabled: false }} 
-        />
+      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
+        {session ? (
+          <>
+            <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
+            <Stack.Screen name="TestAnalysisStack" component={TestAnalysisNavigator} />
+            <Stack.Screen name="SettingsStack" component={SettingsNavigator} />
+            <Stack.Screen 
+              name="AdaptiveSessionScreen" 
+              component={AdaptiveSessionScreen} 
+              options={{ animation: 'slide_from_bottom', gestureEnabled: false }} 
+            />
+          </>
+        ) : (
+          <Stack.Screen name="Auth" component={AuthNavigator} />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

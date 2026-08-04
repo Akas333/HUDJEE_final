@@ -26,9 +26,9 @@ export default function OnboardingScreen({ navigation }: any) {
       })
     ]).start();
 
-    // Navigate to Dashboard after 3 seconds
+    // Navigate to SignInScreen after 3 seconds
     const timer = setTimeout(() => {
-      navigation.replace('MainTabs');
+      navigation.replace('SignInScreen');
     }, 3000);
 
     return () => clearTimeout(timer);

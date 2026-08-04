@@ -46,6 +46,7 @@ export default function DashboardScreen({ navigation }: any) {
     // Auto-slide every 5 seconds
     const interval = setInterval(() => {
       setActiveIndex((prevIndex) => {
+        if (cardsData.length === 0) return 0;
         const nextIndex = (prevIndex + 1) % cardsData.length;
         if (scrollViewRef.current) {
           scrollViewRef.current.scrollTo({ x: nextIndex * CARD_WIDTH, animated: true });
