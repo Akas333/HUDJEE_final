@@ -14,6 +14,7 @@ import Svg, { Path } from 'react-native-svg';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { createSessionFromUrl, signInWithGoogle } from '../lib/googleAuth';
+import { isGuestSignInAvailable, signInAsGuest } from '../lib/guestAuth';
 import { useToastStore } from '../services/ToastService';
 
 /** Google's four-colour "G", drawn inline so we don't ship a bitmap. */
@@ -82,6 +83,20 @@ export default function AuthScreen() {
     }
   };
 
+  const onGuestPress = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      await signInAsGuest();
+      showToast('Signed in as guest', 'success');
+      // AppNavigator swaps to the main tabs via onAuthStateChange.
+    } catch (e: any) {
+      showToast(e?.message ?? 'Guest sign in failed.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -119,6 +134,22 @@ export default function AuthScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        {/* Development only. `__DEV__` is inlined as false in release builds,
+            so the bundler drops this branch entirely. */}
+        {isGuestSignInAvailable && (
+          <TouchableOpacity
+            style={[styles.guestButton, loading && styles.googleButtonDisabled]}
+            onPress={onGuestPress}
+            disabled={loading}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Continue as guest, development only"
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            <Text style={styles.guestButtonText}>Continue as Guest (dev)</Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.legal}>
           By continuing you agree to our Terms of Service and Privacy Policy.
@@ -170,6 +201,21 @@ const styles = StyleSheet.create({
   googleButtonText: {
     color: '#1F1F1F',
     fontSize: 16,
+    fontFamily: typography.semiBold,
+  },
+  guestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  guestButtonText: {
+    color: colors.hudjeeTextSecondary,
+    fontSize: 15,
     fontFamily: typography.semiBold,
   },
   legal: {

@@ -73,6 +73,17 @@ whole app instead of just the sign-in button. Native is used only when *not* in 
 `signOut()` clears Google's native session as well as Supabase's — without that half, Google
 silently reuses the same account forever and sign-out looks broken.
 
+`apps/mobile/src/lib/guestAuth.ts` adds a dev-only guest login on top of Supabase anonymous
+auth, so the guest is a real `auth.users` row and RLS behaves as it will for a real student —
+a stubbed session would satisfy every policy vacuously. Both the helper and its button are
+gated on `__DEV__`, which Metro inlines as `false` in release builds so the branch is dropped.
+It needs **Authentication → Sign In / Providers → Anonymous sign-ins** enabled, which is off by
+default on every project.
+
+Do not run `supabase config push` to toggle that: it pushes the whole local `[auth]` block,
+and `config.toml` still has Google disabled and `site_url` pointing at localhost, so it would
+silently undo the provider setup above.
+
 Setup, none of which is in the repo:
 
 1. **Google Cloud** → Credentials → three OAuth clients: **Web** (its ID goes in
