@@ -163,6 +163,9 @@ export class EngineApi {
     } catch (e: any) {
       console.warn("Backend unavailable, using mock dashboard summary. Error:", e.message);
       return {
+        // Callers that derive their own insights from Supabase (see homeApi)
+        // use this flag to ignore the placeholder copy below.
+        __mock: true,
         time_invested_insight: "Not enough data yet. Start practicing to see your insights!",
         streak_insight: "Set your goal and make some progress!",
         strongest_subject_insight: "Complete more questions to discover your strengths.",
