@@ -44,11 +44,12 @@ export const EngineService = {
   }
 };
 
-import { 
-  Chapter, Question, AnswerResponse, SkipResponse, SessionSummary, 
-  ArenaChapter, ArenaRating, ArenaSessionStartResponse, ArenaAnswerResponse, 
+import {
+  Chapter, Question, AnswerResponse, SkipResponse, SessionSummary,
+  ArenaChapter, ArenaRating, ArenaSessionStartResponse, ArenaAnswerResponse,
   ArenaSkipResponse, ArenaSessionSummary, Challenge
 } from "./api.mock";
+import { AnswerDraft, NormalizedQuestion, gradeDraft } from "../lib/questionFormat";
 
 export class EngineApi {
   
@@ -105,23 +106,42 @@ export class EngineApi {
     return response.data;
   }
 
-  static async submitAnswer(sessionId: string, questionId: string, response: any, timeTakenMs: number, seenQuestionIds: string[] = []): Promise<AnswerResponse> {
+  /**
+   * The engine is told whether the answer was right; it does not work that out
+   * itself. So the key is read here — RLS already exposes every column of a
+   * published question — and graded by `gradeDraft`, which knows what a correct
+   * answer looks like for each of the seven formats. Comparing the raw response
+   * to the raw key only ever worked for single-choice questions, and even then
+   * only by luck: the CMS writes the key 1-based.
+   */
+  static async submitAnswer(
+    sessionId: string,
+    question: NormalizedQuestion,
+    draft: AnswerDraft,
+    timeTakenMs: number,
+    seenQuestionIds: string[] = []
+  ): Promise<AnswerResponse> {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id || 'anonymous';
-    
-    // Fetch correct answer directly from database
-    const { data: qData } = await supabase.from('questions').select('correct_answer').eq('id', questionId).single();
-    const isCorrect = qData?.correct_answer === String(response);
+
+    const { data: qData } = await supabase
+      .from('questions')
+      .select('correct_answer')
+      .eq('id', question.id)
+      .single();
+
+    const correctAnswer = qData?.correct_answer ?? '';
+    const isCorrect = gradeDraft(question, draft, correctAnswer);
 
     const res = await engineApi.post('/irt/session/answer', {
       user_id: userId,
       session_id: sessionId,
-      question_id: questionId,
+      question_id: question.id,
       is_correct: isCorrect,
       time_taken_ms: timeTakenMs,
       seen_question_ids: seenQuestionIds
     });
-    return res.data;
+    return { ...res.data, correct_answer: correctAnswer };
   }
 
   static async skipQuestion(sessionId: string, questionId: string, seenQuestionIds: string[] = []): Promise<SkipResponse> {

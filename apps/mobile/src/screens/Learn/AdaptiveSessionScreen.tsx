@@ -1,97 +1,172 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, TextInput, FlatList, AppState, Image } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  AppState,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, CheckCircle, Flame, ChevronLeft, Bookmark, Flag, Share2, AlertTriangle, Trophy } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import {
+  AlertTriangle,
+  Bookmark,
+  Check,
+  ChevronLeft,
+  Flag,
+  Flame,
+  Share2,
+  SkipForward,
+  Timer,
+  Trophy,
+  X,
+} from 'lucide-react-native';
 
-import { colors } from '../../theme/colors';
-import { Question, AnswerResponse, SessionSummary } from '../../services/api.mock';
+import PressableScale from '../../components/PressableScale';
+import SubjectBackdrop from '../../components/SubjectBackdrop';
+import QuestionView from '../../components/practice/QuestionView';
+import SolutionCard from '../../components/practice/SolutionCard';
+import { AnswerResponse, Question, SessionSummary } from '../../services/api.mock';
 import { EngineApi } from '../../services/api';
-import QuestionCard from '../../components/QuestionCard';
+import { useSubjectStore } from '../../store/subjectStore';
+import { SUBJECT_COLORS, tintFor } from '../../theme/subjects';
+import { typography } from '../../theme/typography';
+import { colors } from '../../theme/colors';
+import {
+  DIVIDER,
+  GLASS,
+  GLASS_BORDER,
+  GUTTER,
+  NEGATIVE,
+  POSITIVE,
+  RADIUS,
+  SURFACE,
+  SURFACE_BORDER,
+  SURFACE_STRONG,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  TRACK,
+} from '../../theme/ui';
+import { formatClock } from '../../theme/arena';
+import {
+  AnswerDraft,
+  NormalizedQuestion,
+  emptyDraft,
+  isDraftComplete,
+  normalizeQuestion,
+} from '../../lib/questionFormat';
+import { HapticService } from '../../services/HapticService';
 
-export interface FeedItem {
-  id: string;
-  type: 'question' | 'loading';
-  question?: Question;
-  status?: 'answering' | 'correct' | 'incorrect' | 'skipped' | 'loading';
-  selectedOption?: number | null;
-  answerData?: AnswerResponse | null;
-}
+/** A right answer moves on by itself; a wrong one waits, because the solution is the point. */
+const CORRECT_ADVANCE_MS = 900;
+
+const REPORT_REASONS = [
+  'Answer key looks wrong',
+  'Typo/unclear wording',
+  'Diagram broken',
+  'Duplicate of another question',
+  'Other',
+];
+
+type Phase = 'answering' | 'submitting' | 'answered';
+type SessionStatus = 'loading' | 'error' | 'active' | 'exhausted' | 'summary';
 
 export default function AdaptiveSessionScreen({ navigation, route }: any) {
-  const { chapterId, chapterTitle, conceptId } = route.params || { chapterId: 'c1', chapterTitle: 'Practice' };
-  
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [sessionStatus, setSessionStatus] = useState<'loading' | 'error' | 'active' | 'exhausted' | 'summary'>('loading');
-  const [summaryData, setSummaryData] = useState<SessionSummary | null>(null);
-  
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isProcessingSkip, setIsProcessingSkip] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
+  const { chapterId, chapterTitle, conceptId } = route.params || {
+    chapterId: 'c1',
+    chapterTitle: 'Practice',
+  };
 
-  // Session Strip Stats
-  const [interactionCount, setInteractionCount] = useState(0);
-  const [accuracy, setAccuracy] = useState(0);
+  const subject = useSubjectStore((s) => s.subject);
+  // The session inherits the subject the student walked in with, so the tint
+  // carries all the way from the subject switcher into the questions.
+  const tint = tintFor(subject);
+  const accent = subject ? SUBJECT_COLORS[subject] : POSITIVE;
+
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>('loading');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [summaryData, setSummaryData] = useState<SessionSummary | null>(null);
+
+  // ── The question on screen, and the answer being built for it ──
+  const [current, setCurrent] = useState<Question | null>(null);
+  const [draft, setDraft] = useState<AnswerDraft>({ kind: 'single', index: null });
+  const [phase, setPhase] = useState<Phase>('answering');
+  const [answerData, setAnswerData] = useState<AnswerResponse | null>(null);
+  const [nextQuestion, setNextQuestion] = useState<Question | null>(null);
+
+  const question: NormalizedQuestion | null = useMemo(
+    () => (current ? normalizeQuestion(current) : null),
+    [current]
+  );
+
+  const seenIdsRef = useRef<string[]>([]);
+  const askedAtRef = useRef<number>(Date.now());
+  const scrollRef = useRef<ScrollView>(null);
+
+  // ── Session strip ──
+  const [answeredCount, setAnsweredCount] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [streak, setStreak] = useState(0);
   const [sessionTime, setSessionTime] = useState(0);
 
-  // Global Session Timer
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSessionTime(prev => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const accuracy = answeredCount === 0 ? 0 : Math.round((correctCount / answeredCount) * 100);
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  // Toast State
   const [toastMsg, setToastMsg] = useState('');
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<string | null>(null);
+  const [reportDetails, setReportDetails] = useState('');
+  const [confirmExit, setConfirmExit] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 2500);
   };
 
-  // Report State
-  const [isReportOpen, setIsReportOpen] = useState(false);
-  const [reportReason, setReportReason] = useState<string | null>(null);
-  const [reportDetails, setReportDetails] = useState('');
+  useEffect(() => {
+    const timer = setInterval(() => setSessionTime((prev) => prev + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const [cardHeight, setCardHeight] = useState(0);
+  /** Puts a question on screen with an empty answer of the right shape. */
+  const present = useCallback((q: Question | null) => {
+    setCurrent(q);
+    setAnswerData(null);
+    setNextQuestion(null);
+    setPhase('answering');
+    askedAtRef.current = Date.now();
+    if (q) {
+      setDraft(emptyDraft(normalizeQuestion(q)));
+      if (!seenIdsRef.current.includes(q.question_id)) seenIdsRef.current.push(q.question_id);
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }
+  }, []);
 
-  // ── Anti-cheat: App Switch Detection ──
+  // ── Anti-cheat: app switch detection ──
   const [showSwitchWarning, setShowSwitchWarning] = useState(false);
   const switchWarningShownRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      // User went to background or inactive
       if (
         appStateRef.current === 'active' &&
         (nextAppState === 'background' || nextAppState === 'inactive')
       ) {
         if (sessionStatus === 'active') {
           if (switchWarningShownRef.current) {
-            // Second offense — end the session
+            // Second offence — end the session.
             navigation.goBack();
           } else {
-            // First offense — show warning when they come back
             switchWarningShownRef.current = true;
           }
         }
       }
 
-      // User came back to foreground
       if (
         (appStateRef.current === 'background' || appStateRef.current === 'inactive') &&
         nextAppState === 'active'
@@ -113,205 +188,146 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
       try {
         const res = await EngineApi.startSession(chapterId, conceptId);
         setSessionId(res.session_id);
-        
+
         if (res.exhausted || !res.first_question) {
           setSessionStatus('exhausted');
           return;
         }
 
-        setFeed([{
-          id: res.first_question.question_id,
-          type: 'question',
-          question: res.first_question,
-          status: 'answering',
-          selectedOption: null,
-          answerData: null
-        }]);
+        present(res.first_question);
         setSessionStatus('active');
       } catch (err: any) {
-        console.error("Error starting session:", err);
+        console.error('Error starting session:', err);
         setSessionStatus('error');
-        
+
         const detail = err.response?.data?.detail;
         if (err.response?.status === 404) {
-          setErrorMsg("No questions have been added for this concept yet!");
+          setErrorMsg('No questions have been added for this concept yet!');
         } else if (detail) {
           setErrorMsg(detail);
         } else {
-          setErrorMsg("Something went wrong loading this session.");
+          setErrorMsg('Something went wrong loading this session.');
         }
       }
     };
     initSession();
   }, [chapterId]);
 
-  const updateFeedItem = (index: number, updates: Partial<FeedItem>) => {
-    setFeed(prev => {
-      const newFeed = [...prev];
-      if (newFeed[index]) {
-        newFeed[index] = { ...newFeed[index], ...updates };
-      }
-      return newFeed;
-    });
-  };
-
-  const handleSelect = (index: number) => {
-    if (feed[currentIndex]?.status !== 'answering') return;
-    updateFeedItem(currentIndex, { selectedOption: index });
-  };
-
   const handleSubmit = async () => {
-    const currentItem = feed[currentIndex];
-    if (currentItem?.status !== 'answering' || currentItem.selectedOption === null || !sessionId || !currentItem.question) return;
-    
-    // Optimistic disable
-    updateFeedItem(currentIndex, { status: 'loading' });
-    
+    if (!question || !sessionId || phase !== 'answering' || !isDraftComplete(draft)) return;
+
+    setPhase('submitting');
     try {
-      const seenQuestionIds = feed.map(f => f.question?.question_id).filter(Boolean) as string[];
-      const res = await EngineApi.submitAnswer(sessionId, currentItem.question.question_id, currentItem.selectedOption, 2500, seenQuestionIds);
-      
-      const newInteractions = interactionCount + 1;
-      setInteractionCount(newInteractions);
-      
-      const isCorrect = res.correct;
-      if (isCorrect) {
-        const newCorrect = correctCount + 1;
-        setCorrectCount(newCorrect);
-        setStreak(s => s + 1);
-        setAccuracy(Math.round((newCorrect / newInteractions) * 100));
+      const res = await EngineApi.submitAnswer(
+        sessionId,
+        question,
+        draft,
+        Date.now() - askedAtRef.current,
+        seenIdsRef.current
+      );
+
+      setAnswerData(res);
+      setPhase('answered');
+      setAnsweredCount((n) => n + 1);
+
+      if (res.correct) {
+        HapticService.success();
+        setCorrectCount((n) => n + 1);
+        setStreak((s) => s + 1);
       } else {
+        HapticService.error();
         setStreak(0);
-        setAccuracy(Math.round((correctCount / newInteractions) * 100));
       }
 
-      setFeed(prev => {
-        const newFeed = [...prev];
-        newFeed[currentIndex] = {
-          ...newFeed[currentIndex],
-          status: isCorrect ? 'correct' : 'incorrect',
-          answerData: res
-        };
-        if (!res.chapter_exhausted && res.next_question) {
-          newFeed.push({
-            id: res.next_question.question_id,
-            type: 'question',
-            question: res.next_question,
-            status: 'answering',
-            selectedOption: null,
-            answerData: null
-          });
-        }
-        return newFeed;
-      });
-
-      if (res.chapter_exhausted) {
+      if (res.next_question) {
+        setNextQuestion(res.next_question);
+      } else if (res.chapter_exhausted) {
         setSessionStatus('exhausted');
       }
-
-      if (isCorrect && !res.chapter_exhausted) {
-        setTimeout(() => {
-          flatListRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
-        }, 1200);
-      }
-      
     } catch (err) {
       console.error(err);
-      updateFeedItem(currentIndex, { status: 'answering' });
+      setPhase('answering');
+      showToast('Could not submit — try again');
     }
   };
 
-  const handleSkip = async (skipIndex: number) => {
-    const skipItem = feed[skipIndex];
-    if (skipItem?.status !== 'answering' || !sessionId || !skipItem.question) return;
-    if (isProcessingSkip) return;
-    setIsProcessingSkip(true);
-    
+  /** Moves to the question the engine already handed us, or ends the run. */
+  const advance = useCallback(() => {
+    if (nextQuestion) {
+      present(nextQuestion);
+    } else {
+      setSessionStatus('exhausted');
+    }
+  }, [nextQuestion, present]);
+
+  // A correct answer does not need a button press to move on.
+  useEffect(() => {
+    if (phase !== 'answered' || !answerData?.correct || !nextQuestion) return;
+    const timer = setTimeout(advance, CORRECT_ADVANCE_MS);
+    return () => clearTimeout(timer);
+  }, [phase, answerData?.correct, nextQuestion, advance]);
+
+  const handleSkip = async () => {
+    if (!question || !sessionId || phase !== 'answering') return;
+
+    setPhase('submitting');
     try {
-      const seenQuestionIds = feed.map(f => f.question?.question_id).filter(Boolean) as string[];
-      const res = await EngineApi.skipQuestion(sessionId, skipItem.question.question_id, seenQuestionIds);
-      setInteractionCount(c => c + 1);
+      const res = await EngineApi.skipQuestion(sessionId, question.id, seenIdsRef.current);
       setStreak(0);
 
-      if (res.concept_deferred) {
-        showToast("We'll come back to this concept later");
-      }
+      if (res.concept_deferred) showToast("We'll come back to this concept later");
 
-      setFeed(prev => {
-        const newFeed = [...prev];
-        newFeed[skipIndex] = {
-          ...newFeed[skipIndex],
-          status: 'skipped'
-        };
-        if (!res.chapter_exhausted && res.next_question) {
-          newFeed.push({
-            id: res.next_question.question_id,
-            type: 'question',
-            question: res.next_question,
-            status: 'answering',
-            selectedOption: null,
-            answerData: null
-          });
-        }
-        return newFeed;
-      });
-
-      if (res.chapter_exhausted) {
+      if (res.next_question) {
+        present(res.next_question);
+      } else {
         setSessionStatus('exhausted');
+        setPhase('answering');
       }
-      
     } catch (err) {
       console.error(err);
-    } finally {
-      setIsProcessingSkip(false);
+      setPhase('answering');
+      showToast('Could not skip — try again');
     }
   };
 
-  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
-    if (viewableItems.length > 0) {
-      const index = viewableItems[0].index;
-      setCurrentIndex(index);
-      const item = viewableItems[0].item;
-      if (!item) return;
-
-      if (item.type === 'loading') {
-        const prevIndex = index - 1;
-        if (prevIndex >= 0 && feed[prevIndex]?.status === 'answering') {
-          handleSkip(prevIndex);
-        }
-      }
-    }
-  }, [feed, isProcessingSkip]);
-
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
-
   const handleExit = async () => {
-    if (sessionId) {
-      setSessionStatus('loading');
-      try {
-        const summary = await EngineApi.endSession(sessionId);
-        setSummaryData(summary);
-        setSessionStatus('summary');
-      } catch (err) {
-        navigation.goBack();
-      }
-    } else {
+    setConfirmExit(false);
+    if (!sessionId) {
+      navigation.goBack();
+      return;
+    }
+    setSessionStatus('loading');
+    try {
+      const summary = await EngineApi.endSession(sessionId);
+      setSummaryData(summary);
+      setSessionStatus('summary');
+    } catch (err) {
       navigation.goBack();
     }
   };
 
-  const handleBookmark = () => showToast("Saved");
-  const handleReport = () => setIsReportOpen(true);
-  const handleChallenge = () => showToast("Challenge sent!");
+  const handleBookmark = () => showToast('Saved');
+
+  /**
+   * The "challenge a friend" affordance hands the question that is on screen to
+   * the Challenges tab pre-filled, rather than sending anything from here — who
+   * to send it to and how long they get is still a decision.
+   */
+  const handleChallenge = () => {
+    if (!question) return;
+    navigation.navigate('Challenges', {
+      screen: 'ChallengeCompose',
+      params: { questionId: question.id, chapterId, chapterName: chapterTitle },
+    });
+  };
 
   const submitReport = async () => {
-    const currentItem = feed[currentIndex];
-    if (!reportReason || !currentItem?.question) return;
+    if (!reportReason || !question) return;
     try {
-      await EngineApi.reportQuestion(currentItem.question.question_id, reportReason, reportDetails);
+      await EngineApi.reportQuestion(question.id, reportReason, reportDetails);
       showToast("Thanks, we'll take a look");
     } catch (err) {
-      showToast("Failed to send report");
+      showToast('Failed to send report');
     } finally {
       setIsReportOpen(false);
       setReportReason(null);
@@ -319,239 +335,172 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
     }
   };
 
-  // ──────────────────────────────────────────
-  // Header: exact replica from screenshot
-  // ──────────────────────────────────────────
-  const renderHeader = () => (
-    <View style={styles.headerWrap}>
-      {/* Row 1: Back on left · Logo centered */}
-      <View style={styles.headerTop}>
-        <TouchableOpacity 
-          style={{ position: 'absolute', left: 16, zIndex: 10 }}
-          onPress={handleExit} 
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <ChevronLeft color="#FFF" size={26} strokeWidth={2.5} />
-        </TouchableOpacity>
+  /**
+   * Every state renders the same shell, so the backdrop is mounted once rather
+   * than pasted into each one. A plain function rather than a component: a new
+   * component type each render would remount the session on every state change.
+   */
+  const shell = (children: React.ReactNode) => (
+    <View style={styles.root}>
+      <SubjectBackdrop color={tint} />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {children}
+      </SafeAreaView>
+    </View>
+  );
 
-        <View style={styles.logoRow}>
-          <Image 
-            source={require('../../../assets/logo.png')} 
-            style={{ height: 32, width: 140 }} 
-            resizeMode="contain" 
+  // ── Header ─────────────────────────────────────────────────────────────────
+
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <View style={styles.headerTop}>
+        <PressableScale
+          scaleTo={0.9}
+          onPress={() => (sessionStatus === 'active' ? setConfirmExit(true) : navigation.goBack())}
+          accessibilityLabel="Leave session"
+          style={styles.circleButton}
+        >
+          <ChevronLeft color={TEXT} size={20} strokeWidth={2.4} />
+        </PressableScale>
+
+        <View style={styles.headerTitleWrap}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {chapterTitle || 'Practice'}
+          </Text>
+          <Text style={styles.headerSub}>Adaptive session</Text>
+        </View>
+
+        <PressableScale
+          scaleTo={0.9}
+          onPress={() => setIsReportOpen(true)}
+          disabled={!question}
+          accessibilityLabel="Report this question"
+          style={styles.circleButton}
+        >
+          <Flag color={TEXT_MUTED} size={17} strokeWidth={2} />
+        </PressableScale>
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={styles.stats}>
+          <View style={styles.stat}>
+            <Timer color={TEXT_FAINT} size={14} strokeWidth={2} />
+            <Text style={styles.statText}>{formatClock(sessionTime)}</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statText}>{answeredCount} answered</Text>
+          </View>
+          <View style={styles.stat}>
+            <Flame color={streak > 0 ? accent : TEXT_FAINT} size={14} strokeWidth={2} />
+            <Text style={[styles.statText, streak > 0 && { color: accent }]}>{streak}</Text>
+          </View>
+        </View>
+
+        <View style={styles.headerActions}>
+          <PressableScale
+            scaleTo={0.9}
+            onPress={handleBookmark}
+            disabled={!question}
+            accessibilityLabel="Save this question"
+            hitSlop={8}
+          >
+            <Bookmark color={TEXT_MUTED} size={17} strokeWidth={2} />
+          </PressableScale>
+          <PressableScale
+            scaleTo={0.9}
+            onPress={handleChallenge}
+            disabled={!question}
+            accessibilityLabel="Challenge a friend with this question"
+            hitSlop={8}
+          >
+            <Share2 color={TEXT_MUTED} size={17} strokeWidth={2} />
+          </PressableScale>
+        </View>
+      </View>
+
+      {/* Accuracy, where the vertical mastery bar used to be: a strip the width
+          of the screen rather than a column stealing it from the options. */}
+      <View style={styles.accuracyRow}>
+        <View style={styles.track}>
+          <View
+            style={[
+              styles.trackFill,
+              { width: `${answeredCount === 0 ? 0 : Math.max(4, accuracy)}%`, backgroundColor: accent },
+            ]}
           />
         </View>
-      </View>
-
-      {/* Thin separator */}
-      <View style={styles.sep} />
-
-      {/* Row 2: Stats left · Actions right */}
-      <View style={styles.headerBottom}>
-        <View style={styles.statsRow}>
-          <Text style={styles.statLabel}>{formatTime(sessionTime)}</Text>
-          <Text style={styles.statLabel}>{currentIndex + 1} Qns</Text>
-          <View style={styles.streakPill}>
-            <Flame color="#FFF" size={14} />
-            <Text style={styles.streakNum}>{streak}</Text>
-          </View>
-        </View>
-
-        <View style={styles.actionsRow}>
-          <TouchableOpacity onPress={handleBookmark} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Bookmark color="#777" size={18} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleChallenge} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Share2 color="#777" size={18} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleReport} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Flag color="#777" size={18} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Second separator */}
-      <View style={styles.sep} />
-    </View>
-  );
-
-  // ──────────────────────────────────────────
-  // States: loading / error / exhausted
-  // ──────────────────────────────────────────
-
-  const renderExhaustedState = () => (
-    <View style={[styles.centeredState, { flex: 1 }]}>
-      <LinearGradient
-        colors={['rgba(128, 238, 193, 0.1)', 'transparent']}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={{
-        alignItems: 'center',
-        padding: 32,
-        backgroundColor: 'rgba(22, 22, 26, 0.8)',
-        borderRadius: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(128, 238, 193, 0.3)',
-        shadowColor: '#80EEC1',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.5,
-        shadowRadius: 20,
-        elevation: 10,
-      }}>
-        <Trophy color="#80EEC1" size={64} style={{ marginBottom: 24 }} />
-        <Text style={[styles.stateTitle, { color: '#FFF' }]}>You are a Master Now!</Text>
-        <Text style={[styles.stateSub, { color: '#A1A1AA' }]}>
-          You have successfully conquered all questions available for this concept.
-        </Text>
-        <TouchableOpacity style={styles.primaryBtn} onPress={handleExit}>
-          <Text style={styles.primaryBtnText}>Review Summary</Text>
-        </TouchableOpacity>
+        <Text style={styles.accuracyText}>{answeredCount === 0 ? '—' : `${accuracy}%`}</Text>
       </View>
     </View>
   );
 
-  const renderErrorState = () => (
-    <View style={styles.centeredState}>
-      <Text style={styles.stateTitle}>Connection Error</Text>
-      <Text style={styles.stateSub}>
-        {errorMsg || "Failed to connect to the backend engine."}
-      </Text>
-      <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.goBack()}>
-        <Text style={styles.primaryBtnText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  // ──────────────────────────────────────────
-  // Modals
-  // ──────────────────────────────────────────
-
-  const renderReportModal = () => (
-    <Modal visible={isReportOpen} animationType="slide" transparent>
-      <View style={styles.modalBg}>
-        <View style={styles.modalCard}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Text style={styles.modalTitle}>Report Question</Text>
-            <TouchableOpacity onPress={() => setIsReportOpen(false)}>
-              <X color="#777" size={24} />
-            </TouchableOpacity>
-          </View>
-          
-          <Text style={{ fontFamily: 'Montserrat_600SemiBold', color: '#888', marginBottom: 12 }}>What's wrong?</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-            {['Answer key looks wrong', 'Typo/unclear wording', 'Diagram broken', 'Duplicate of another question', 'Other'].map(r => (
-              <TouchableOpacity 
-                key={r} 
-                style={{
-                  paddingHorizontal: 12, paddingVertical: 8, borderRadius: 100, borderWidth: 1,
-                  borderColor: reportReason === r ? '#69F0AE' : '#2A2A2E',
-                  backgroundColor: reportReason === r ? 'rgba(105,240,174,0.1)' : '#1A1A1E'
-                }}
-                onPress={() => setReportReason(r)}
-              >
-                <Text style={{ fontFamily: 'Montserrat_600SemiBold', color: reportReason === r ? '#69F0AE' : '#E0E0E0', fontSize: 13 }}>{r}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {reportReason === 'Other' && (
-            <TextInput 
-              style={{ backgroundColor: '#1A1A1E', color: '#FFF', padding: 12, borderRadius: 8, fontFamily: 'Montserrat_500Medium', marginBottom: 16, borderWidth: 1, borderColor: '#2A2A2E' }}
-              placeholder="Any additional details?"
-              placeholderTextColor="#555"
-              value={reportDetails}
-              onChangeText={setReportDetails}
-            />
-          )}
-          
-          {reportReason && (
-            <TouchableOpacity style={styles.primaryBtn} onPress={submitReport}>
-              <Text style={styles.primaryBtnText}>Submit Report</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
-
-  const renderSummaryModal = () => (
-    <Modal visible={sessionStatus === 'summary'} animationType="slide" transparent>
-      <View style={styles.modalBg}>
-        <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>Session Complete</Text>
-          <View style={{ flexDirection: 'row', gap: 12, marginVertical: 20 }}>
-            <View style={styles.summaryStatBox}>
-              <Text style={styles.summaryStatVal}>{summaryData?.questions_answered}</Text>
-              <Text style={styles.summaryStatLbl}>Answered</Text>
-            </View>
-            <View style={styles.summaryStatBox}>
-              <Text style={styles.summaryStatVal}>{summaryData?.accuracy}%</Text>
-              <Text style={styles.summaryStatLbl}>Accuracy</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.primaryBtnText}>Done</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // ──────────────────────────────────────────
-  // Early returns for non-active states
-  // ──────────────────────────────────────────
+  // ── Non-active states ──────────────────────────────────────────────────────
 
   if (sessionStatus === 'loading') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
+    return shell(
+      <>
         {renderHeader()}
-        <View style={{ flex: 1, justifyContent: 'center' }}>
-          <ActivityIndicator color="#69F0AE" size="large" />
+        <View style={styles.centered}>
+          <ActivityIndicator color={accent} size="large" />
         </View>
-      </SafeAreaView>
+      </>
     );
   }
 
   if (sessionStatus === 'error') {
-    return (
-      <SafeAreaView style={styles.safeArea}>
+    return shell(
+      <>
         {renderHeader()}
-        {renderErrorState()}
-      </SafeAreaView>
+        <View style={styles.centered}>
+          <Text style={styles.centeredTitle}>Connection error</Text>
+          <Text style={styles.centeredText}>
+            {errorMsg || 'Failed to connect to the backend engine.'}
+          </Text>
+          <PressableScale onPress={() => navigation.goBack()} style={styles.secondaryButton}>
+            <Text style={styles.secondaryText}>Go back</Text>
+          </PressableScale>
+        </View>
+      </>
     );
   }
 
-  if (sessionStatus === 'exhausted' && feed.length === 0) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
+  if (sessionStatus === 'exhausted' && phase !== 'answered') {
+    return shell(
+      <>
         {renderHeader()}
-        {renderExhaustedState()}
-      </SafeAreaView>
+        <View style={styles.centered}>
+          <View style={styles.masterCard}>
+            <Trophy color={POSITIVE} size={52} />
+            <Text style={styles.centeredTitle}>You are a master now</Text>
+            <Text style={styles.centeredText}>
+              You have cleared every question available for this concept.
+            </Text>
+            <PressableScale
+              onPress={handleExit}
+              style={[styles.primaryButton, { backgroundColor: accent }]}
+            >
+              <Text style={styles.primaryText}>Review summary</Text>
+            </PressableScale>
+          </View>
+        </View>
+        {renderSummaryModal()}
+      </>
     );
   }
 
-  // ──────────────────────────────────────────
-  // Main Render: Reel-style FlatList
-  // ──────────────────────────────────────────
+  // ── The session ────────────────────────────────────────────────────────────
 
-  const flatListData = [...feed];
-  const lastItem = feed[feed.length - 1];
-  if (lastItem && lastItem.status === 'answering' && !isProcessingSkip) {
-    flatListData.push({
-      id: 'loading-skip',
-      type: 'loading'
-    });
-  } else if (sessionStatus === 'exhausted' && lastItem && lastItem.status !== 'answering') {
-    flatListData.push({
-      id: 'exhausted-end',
-      type: 'loading'
-    });
-  }
+  const answering = phase === 'answering';
+  const answered = phase === 'answered';
+  const reveal =
+    answered && answerData
+      ? { correctAnswer: answerData.correct_answer ?? '', correct: answerData.correct }
+      : null;
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
+  return shell(
+    <>
       {renderHeader()}
-      
+
       {!!toastMsg && (
         <View style={styles.toastWrap} pointerEvents="none">
           <View style={styles.toastPill}>
@@ -560,260 +509,408 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
         </View>
       )}
 
+      {question ? (
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Animated.View key={question.id} entering={FadeInDown.duration(240)} style={{ gap: 20 }}>
+            <QuestionView
+              question={question}
+              draft={draft}
+              accent={accent}
+              reveal={reveal}
+              onDraftChange={setDraft}
+            />
+
+            {answered && answerData && !answerData.correct ? (
+              <SolutionCard
+                steps={answerData.solution?.steps ?? []}
+                misconception={answerData.solution?.misconception_tag ?? null}
+              />
+            ) : null}
+          </Animated.View>
+        </ScrollView>
+      ) : (
+        <View style={styles.centered}>
+          <ActivityIndicator color={accent} />
+        </View>
+      )}
+
+      {/* ── Action bar ── */}
+      <View style={styles.footer}>
+        {answering || phase === 'submitting' ? (
+          <>
+            <PressableScale
+              onPress={handleSkip}
+              disabled={phase === 'submitting'}
+              scaleTo={0.95}
+              style={styles.skipButton}
+            >
+              <SkipForward color={TEXT_MUTED} size={15} strokeWidth={2} />
+              <Text style={styles.skipText}>Skip</Text>
+            </PressableScale>
+
+            <PressableScale
+              onPress={handleSubmit}
+              disabled={!isDraftComplete(draft) || phase === 'submitting'}
+              scaleTo={0.97}
+              style={[
+                styles.submitButton,
+                {
+                  backgroundColor: isDraftComplete(draft) && phase === 'answering' ? accent : SURFACE_STRONG,
+                },
+              ]}
+            >
+              {phase === 'submitting' ? (
+                <ActivityIndicator color={TEXT_MUTED} size="small" />
+              ) : (
+                <Text
+                  style={[
+                    styles.submitText,
+                    { color: isDraftComplete(draft) ? '#0B0B0C' : TEXT_FAINT },
+                  ]}
+                >
+                  Submit
+                </Text>
+              )}
+            </PressableScale>
+          </>
+        ) : (
+          <>
+            <View style={styles.verdictBanner}>
+              {answerData?.correct ? (
+                <Check color={POSITIVE} size={16} strokeWidth={2.6} />
+              ) : (
+                <X color={NEGATIVE} size={16} strokeWidth={2.6} />
+              )}
+              <Text
+                style={[styles.verdictText, { color: answerData?.correct ? POSITIVE : NEGATIVE }]}
+              >
+                {answerData?.correct ? 'Correct' : 'Incorrect'}
+              </Text>
+            </View>
+
+            {/* A right answer moves on by itself, so it needs no button — unless
+                there is nothing left to move on to. */}
+            {!answerData?.correct || !nextQuestion ? (
+              <PressableScale
+                onPress={nextQuestion ? advance : handleExit}
+                scaleTo={0.97}
+                style={[styles.submitButton, { backgroundColor: '#F5F5F7' }]}
+              >
+                <Text style={[styles.submitText, { color: '#0B0B0C' }]}>
+                  {nextQuestion ? 'Next question' : 'Finish session'}
+                </Text>
+              </PressableScale>
+            ) : null}
+          </>
+        )}
+      </View>
+
       {renderSummaryModal()}
       {renderReportModal()}
 
-      {/* Anti-cheat warning modal */}
-      <Modal visible={showSwitchWarning} animationType="fade" transparent>
-        <View style={styles.modalBg}>
-          <View style={[styles.modalCard, { alignItems: 'center' }]}>
-            <AlertTriangle color="#F59E0B" size={48} style={{ marginBottom: 16 }} />
-            <Text style={[styles.modalTitle, { marginBottom: 8 }]}>Don't switch apps!</Text>
-            <Text style={{ fontFamily: 'Montserrat_500Medium', color: '#999', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>
-              Switching to another app during practice is not allowed. If you do it again, your session will end automatically.
+      {/* Leaving mid-session is a decision, not a swipe. */}
+      <Modal visible={confirmExit} transparent animationType="fade">
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>End this session?</Text>
+            <Text style={styles.modalText}>
+              Everything you have answered is already saved. You will get the summary next.
             </Text>
-            <TouchableOpacity 
-              style={styles.primaryBtn} 
-              onPress={() => setShowSwitchWarning(false)}
-            >
-              <Text style={styles.primaryBtnText}>Continue Practicing</Text>
-            </TouchableOpacity>
+            <View style={styles.modalActions}>
+              <PressableScale
+                onPress={() => setConfirmExit(false)}
+                scaleTo={0.96}
+                style={[styles.modalButton, { backgroundColor: SURFACE_STRONG }]}
+              >
+                <Text style={[styles.modalButtonText, { color: TEXT }]}>Keep going</Text>
+              </PressableScale>
+              <PressableScale
+                onPress={handleExit}
+                scaleTo={0.96}
+                style={[styles.modalButton, { backgroundColor: accent }]}
+              >
+                <Text style={[styles.modalButtonText, { color: '#0B0B0C' }]}>End session</Text>
+              </PressableScale>
+            </View>
           </View>
         </View>
       </Modal>
 
-      <View 
-        style={{ flex: 1, overflow: 'hidden' }} 
-        onLayout={(e) => setCardHeight(e.nativeEvent.layout.height)}
-      >
-        {cardHeight > 0 && (
-          <FlatList
-            ref={flatListRef}
-            data={flatListData}
-            keyExtractor={(item, index) => `${item.id}-${index}`}
-            showsVerticalScrollIndicator={false}
-            pagingEnabled
-            snapToInterval={cardHeight}
-            decelerationRate="fast"
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            renderItem={({ item }) => (
-              <View style={{ height: cardHeight }}>
-                {item.type === 'question' && item.question ? (
-                  <QuestionCard
-                    question={item.question}
-                    status={item.status as any}
-                    selectedOption={item.selectedOption ?? null}
-                    answerData={item.answerData ?? null}
-                    masteryLevel={Math.max(10, accuracy)}
-                    onSelect={handleSelect}
-                    onSubmit={handleSubmit}
-                    onSkip={() => {}}
-                    onBookmark={handleBookmark}
-                    onReport={handleReport}
-                    onChallenge={handleChallenge}
-                  />
-                ) : (
-                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    {item.id === 'exhausted-end' ? (
-                      <View style={{
-                        alignItems: 'center',
-                        padding: 32,
-                        backgroundColor: 'rgba(22, 22, 26, 0.8)',
-                        borderRadius: 24,
-                        borderWidth: 1,
-                        borderColor: 'rgba(128, 238, 193, 0.3)',
-                        shadowColor: '#80EEC1',
-                        shadowOffset: { width: 0, height: 0 },
-                        shadowOpacity: 0.5,
-                        shadowRadius: 20,
-                        elevation: 10,
-                        margin: 20,
-                      }}>
-                        <Trophy color="#80EEC1" size={56} style={{ marginBottom: 24 }} />
-                        <Text style={{ color: '#FFF', fontFamily: 'Montserrat_700Bold', fontSize: 24, textAlign: 'center', marginBottom: 12 }}>You are a Master Now!</Text>
-                        <Text style={{ color: '#A1A1AA', fontFamily: 'Montserrat_500Medium', fontSize: 15, textAlign: 'center', lineHeight: 22 }}>
-                          You have successfully conquered all questions available for this concept.
-                        </Text>
-                        <TouchableOpacity style={[styles.primaryBtn, { marginTop: 24, width: '100%' }]} onPress={handleExit}>
-                          <Text style={styles.primaryBtnText}>Review Summary</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <>
-                        <ActivityIndicator color="#69F0AE" size="large" />
-                        <Text style={{ marginTop: 16, color: '#777', fontFamily: 'Montserrat_600SemiBold' }}>Fetching next question...</Text>
-                      </>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-          />
-        )}
-      </View>
-    </SafeAreaView>
+      {/* Anti-cheat warning */}
+      <Modal visible={showSwitchWarning} animationType="fade" transparent>
+        <View style={styles.modalScrim}>
+          <View style={[styles.modalCard, { alignItems: 'center' }]}>
+            <AlertTriangle color="#F0B65C" size={44} />
+            <Text style={[styles.modalTitle, { marginTop: 14 }]}>Don't switch apps</Text>
+            <Text style={[styles.modalText, { textAlign: 'center' }]}>
+              Switching to another app during practice is not allowed. If you do it again, your
+              session will end automatically.
+            </Text>
+            <PressableScale
+              onPress={() => setShowSwitchWarning(false)}
+              scaleTo={0.96}
+              style={[styles.modalButton, { backgroundColor: accent, marginTop: 22, width: '100%' }]}
+            >
+              <Text style={[styles.modalButtonText, { color: '#0B0B0C' }]}>Continue practicing</Text>
+            </PressableScale>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
+
+  // ── Modals ─────────────────────────────────────────────────────────────────
+
+  function renderSummaryModal() {
+    return (
+      <Modal visible={sessionStatus === 'summary'} animationType="slide" transparent>
+        <View style={styles.sheetScrim}>
+          <View style={styles.sheet}>
+            <Text style={styles.modalTitle}>Session complete</Text>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryValue}>{summaryData?.questions_answered ?? answeredCount}</Text>
+                <Text style={styles.summaryLabel}>Answered</Text>
+              </View>
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryValue}>{summaryData?.accuracy ?? accuracy}%</Text>
+                <Text style={styles.summaryLabel}>Accuracy</Text>
+              </View>
+              <View style={styles.summaryBox}>
+                <Text style={styles.summaryValue}>{formatClock(sessionTime)}</Text>
+                <Text style={styles.summaryLabel}>Time</Text>
+              </View>
+            </View>
+            <PressableScale
+              onPress={() => navigation.goBack()}
+              style={[styles.primaryButton, { backgroundColor: accent }]}
+            >
+              <Text style={styles.primaryText}>Done</Text>
+            </PressableScale>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  function renderReportModal() {
+    return (
+      <Modal visible={isReportOpen} animationType="slide" transparent>
+        <View style={styles.sheetScrim}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHead}>
+              <Text style={styles.modalTitle}>Report question</Text>
+              <PressableScale
+                scaleTo={0.9}
+                onPress={() => setIsReportOpen(false)}
+                style={styles.circleButton}
+              >
+                <X color={TEXT_MUTED} size={18} strokeWidth={2} />
+              </PressableScale>
+            </View>
+
+            <Text style={styles.sheetLabel}>What's wrong?</Text>
+            <View style={styles.reasonWrap}>
+              {REPORT_REASONS.map((reason) => {
+                const picked = reportReason === reason;
+                return (
+                  <PressableScale
+                    key={reason}
+                    scaleTo={0.96}
+                    onPress={() => setReportReason(reason)}
+                    style={[
+                      styles.reasonChip,
+                      picked && { borderColor: `${accent}88`, backgroundColor: `${accent}1A` },
+                    ]}
+                  >
+                    <Text style={[styles.reasonText, picked && { color: accent }]}>{reason}</Text>
+                  </PressableScale>
+                );
+              })}
+            </View>
+
+            {reportReason === 'Other' && (
+              <TextInput
+                style={styles.reportInput}
+                placeholder="Any additional details?"
+                placeholderTextColor={TEXT_FAINT}
+                value={reportDetails}
+                onChangeText={setReportDetails}
+              />
+            )}
+
+            {reportReason && (
+              <PressableScale
+                onPress={submitReport}
+                style={[styles.primaryButton, { backgroundColor: accent }]}
+              >
+                <Text style={styles.primaryText}>Submit report</Text>
+              </PressableScale>
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 }
 
-// ──────────────────────────────────────────
-// Styles — pixel-matched to screenshot
-// ──────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
+  // The backdrop lives on the root; everything above it is transparent so the
+  // subject tint and its waves are actually visible.
+  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  safeArea: { flex: 1, backgroundColor: 'transparent' },
 
   // ── Header ──
-  headerWrap: {
-    backgroundColor: '#000',
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center', // Center logo
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minHeight: 56,
-  },
-  logoRow: {
+  header: { paddingHorizontal: GUTTER, paddingTop: 4, gap: 14, paddingBottom: 14 },
+  headerTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerTitleWrap: { flex: 1, alignItems: 'center' },
+  headerTitle: { color: TEXT, fontSize: 16, fontFamily: typography.bold, letterSpacing: -0.3 },
+  headerSub: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular, marginTop: 2 },
+  circleButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: GLASS,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sep: {
-    height: 1,
-    backgroundColor: '#222',
-  },
-  headerBottom: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  statLabel: {
-    fontFamily: 'Montserrat_600SemiBold',
-    color: '#999',
-    fontSize: 15,
-  },
-  streakPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  streakNum: {
-    fontFamily: 'Montserrat_700Bold',
-    color: '#FFF',
-    fontSize: 15,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-  },
+
+  statsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stats: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  stat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statText: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.semiBold },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+
+  accuracyRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  track: { flex: 1, height: 4, borderRadius: 2, backgroundColor: TRACK, overflow: 'hidden' },
+  trackFill: { height: '100%', borderRadius: 2 },
+  accuracyText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.semiBold, width: 34, textAlign: 'right' },
+
+  // ── Question ──
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 32 },
 
   // ── States ──
-  centeredState: {
-    flex: 1,
-    justifyContent: 'center',
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: GUTTER, gap: 10 },
+  centeredTitle: { color: TEXT, fontSize: 19, fontFamily: typography.bold, letterSpacing: -0.3, textAlign: 'center' },
+  centeredText: { color: TEXT_MUTED, fontSize: 14, fontFamily: typography.regular, textAlign: 'center', lineHeight: 21 },
+  masterCard: {
     alignItems: 'center',
-    padding: 32,
-  },
-  stateTitle: {
-    fontFamily: 'Montserrat_800ExtraBold',
-    color: '#FFF',
-    fontSize: 24,
-    marginBottom: 12,
-  },
-  stateSub: {
-    fontFamily: 'Montserrat_600SemiBold',
-    color: '#888',
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
+    gap: 12,
+    padding: 28,
+    borderRadius: 24,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: `${POSITIVE}33`,
   },
 
-  // ── Buttons ──
-  primaryBtn: {
-    backgroundColor: '#69F0AE',
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 100,
-    width: '100%',
+  // ── Footer ──
+  footer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: GUTTER,
+    paddingTop: 12,
+    paddingBottom: 20,
+    borderTopWidth: 1,
+    borderTopColor: SURFACE_BORDER,
+    backgroundColor: 'rgba(11,11,12,0.86)',
   },
-  primaryBtnText: {
-    fontFamily: 'Montserrat_800ExtraBold',
-    color: '#000',
-    fontSize: 16,
+  skipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    backgroundColor: SURFACE,
   },
+  skipText: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.semiBold },
+  submitButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 999 },
+  submitText: { fontSize: 15, fontFamily: typography.bold, letterSpacing: -0.2 },
+  verdictBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, paddingHorizontal: 6 },
+  verdictText: { fontSize: 14, fontFamily: typography.bold },
+
+  primaryButton: { width: '100%', alignItems: 'center', paddingVertical: 15, borderRadius: 999, marginTop: 8 },
+  primaryText: { color: '#0B0B0C', fontSize: 15, fontFamily: typography.bold },
+  secondaryButton: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    backgroundColor: SURFACE,
+  },
+  secondaryText: { color: TEXT, fontSize: 14, fontFamily: typography.semiBold },
 
   // ── Toast ──
-  toastWrap: {
-    position: 'absolute',
-    top: 140,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 100,
-  },
+  toastWrap: { position: 'absolute', top: 128, left: 0, right: 0, alignItems: 'center', zIndex: 100 },
   toastPill: {
-    backgroundColor: '#1A1A1E',
+    backgroundColor: SURFACE_STRONG,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 100,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#2A2A2E',
+    borderColor: SURFACE_BORDER,
   },
-  toastText: {
-    fontFamily: 'Montserrat_700Bold',
-    color: '#FFF',
-    fontSize: 13,
-  },
+  toastText: { color: TEXT, fontSize: 13, fontFamily: typography.semiBold },
 
   // ── Modals ──
-  modalBg: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'flex-end',
-  },
-  modalCard: {
-    backgroundColor: '#111',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  modalScrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: GUTTER },
+  modalCard: { backgroundColor: '#16161A', borderRadius: 22, borderWidth: 1, borderColor: DIVIDER, padding: 24 },
+  modalTitle: { color: TEXT, fontSize: 18, fontFamily: typography.bold, marginBottom: 8 },
+  modalText: { color: TEXT_MUTED, fontSize: 14, fontFamily: typography.regular, lineHeight: 20 },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 22 },
+  modalButton: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 999 },
+  modalButtonText: { fontSize: 14, fontFamily: typography.bold },
+
+  sheetScrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#16161A',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderTopWidth: 1,
+    borderColor: DIVIDER,
     padding: 24,
-    paddingBottom: 48,
+    paddingBottom: 40,
   },
-  modalTitle: {
-    fontFamily: 'Montserrat_800ExtraBold',
-    color: '#FFF',
-    fontSize: 22,
-    textAlign: 'center',
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetLabel: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.semiBold, marginBottom: 12 },
+
+  summaryRow: { flexDirection: 'row', gap: 10, marginVertical: 18 },
+  summaryBox: { flex: 1, alignItems: 'center', gap: 4, padding: 16, borderRadius: RADIUS, backgroundColor: SURFACE, borderWidth: 1, borderColor: SURFACE_BORDER },
+  summaryValue: { color: TEXT, fontSize: 20, fontFamily: typography.bold },
+  summaryLabel: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
+
+  reasonWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  reasonChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    backgroundColor: SURFACE,
   },
-  summaryStatBox: {
-    flex: 1,
-    backgroundColor: '#1A1A1E',
-    padding: 16,
+  reasonText: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.semiBold },
+  reportInput: {
+    backgroundColor: SURFACE,
+    color: TEXT,
+    padding: 14,
     borderRadius: 12,
-    alignItems: 'center',
-  },
-  summaryStatVal: {
-    fontFamily: 'Montserrat_800ExtraBold',
-    color: '#FFF',
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  summaryStatLbl: {
-    fontFamily: 'Montserrat_600SemiBold',
-    color: '#888',
-    fontSize: 13,
+    fontFamily: typography.regular,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
   },
 });

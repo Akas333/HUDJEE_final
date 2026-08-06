@@ -16,6 +16,26 @@ router = APIRouter()
 CONCEPT_STATE_CONFLICT = "user_id,concept_id"
 
 
+def _serialize_question(q: dict) -> dict:
+    """
+    A question as the app reads it.
+
+    `options` is passed through exactly as authored — `[{id, text, image_url}]`
+    for the choice formats, `{type: 'matrix', left, right}` for matrix match,
+    null for the numeric ones. It used to be flattened to a list of option texts
+    here, which quietly dropped every option image and every option id (the id
+    is what `correct_answer` points at), so anything other than a plain
+    text-only MCQ arrived unanswerable.
+    """
+    return {
+        "question_id": q["id"],
+        "concept_id": q.get("concept_id", ""),
+        "type": q["format"],
+        "prompt": q["question_body"],
+        "options": q.get("options"),
+    }
+
+
 def _now() -> str:
     """
     An explicit UTC timestamp. Postgres does accept the string "now()" as timestamptz
@@ -137,13 +157,7 @@ def start_session(request: SessionStartRequest):
     
     return {
         "session_id": session_id,
-        "first_question": {
-            "question_id": first_q["id"],
-            "concept_id": first_q.get("concept_id", ""),
-            "type": first_q["format"],
-            "prompt": first_q["question_body"],
-            "options": first_q.get("options") if isinstance(first_q.get("options"), dict) else ([o["text"] for o in first_q.get("options", [])] if first_q.get("options") else None),
-        },
+        "first_question": _serialize_question(first_q),
         "exhausted": False
     }
 
@@ -352,13 +366,7 @@ def submit_answer(request: AnswerSubmitRequest):
         try:
             next_q_id = select_next_question(available_items=available_items, current_theta=new_theta)
             next_q = next((aq for aq in target_bucket_qs if aq["id"] == next_q_id), target_bucket_qs[0])
-            next_q_dict = {
-                "question_id": next_q["id"],
-                "concept_id": next_q.get("concept_id", ""),
-                "type": next_q["format"],
-                "prompt": next_q["question_body"],
-                "options": next_q.get("options") if isinstance(next_q.get("options"), dict) else ([o["text"] for o in next_q.get("options", [])] if next_q.get("options") else None),
-            }
+            next_q_dict = _serialize_question(next_q)
         except ValueError:
             exhausted = True
             
@@ -441,13 +449,7 @@ def skip_question(request: SkipRequest):
         exhausted = True
     else:
         next_q = available_qs[0]
-        next_q_dict = {
-            "question_id": next_q["id"],
-            "concept_id": next_q.get("concept_id", ""),
-            "type": next_q["format"],
-            "prompt": next_q["question_body"],
-            "options": next_q.get("options") if isinstance(next_q.get("options"), dict) else ([o["text"] for o in next_q.get("options", [])] if next_q.get("options") else None),
-        }
+        next_q_dict = _serialize_question(next_q)
         
     return {
         "next_question": next_q_dict,
