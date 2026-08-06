@@ -2,10 +2,28 @@ from fastapi import APIRouter, HTTPException
 from app.models.schemas import IRTEstimateRequest, SessionStartRequest, SessionStartResponse, AnswerSubmitRequest, AnswerSubmitResponse, SkipRequest, SkipResponse, ReportRequest
 from app.services.irt import estimate_theta, select_next_question, get_initial_theta
 from app.db.supabase import get_supabase
+from datetime import datetime, timezone
 import uuid
 import json
 
 router = APIRouter()
+
+# `user_concept_state` is keyed for our purposes by (user_id, concept_id), but its
+# primary key is a generated `id`. PostgREST resolves an upsert on the primary key
+# unless told otherwise, so a payload without an `id` never conflicts, falls through
+# to a plain insert, and trips the unique constraint the moment a student answers a
+# second question on the same concept.
+CONCEPT_STATE_CONFLICT = "user_id,concept_id"
+
+
+def _now() -> str:
+    """
+    An explicit UTC timestamp. Postgres does accept the string "now()" as timestamptz
+    input — its date parser treats the parentheses as delimiters and resolves the bare
+    `now` keyword — but that is an accident of tokenising, not an interface. Send a
+    real timestamp rather than lean on it.
+    """
+    return datetime.now(timezone.utc).isoformat()
 
 @router.post("/estimate")
 def compute_irt(request: IRTEstimateRequest):
@@ -246,8 +264,8 @@ def submit_answer(request: AnswerSubmitRequest):
                 "current_bucket": current_bucket,
                 "streak_correct": streak_c,
                 "streak_incorrect": streak_i,
-                "last_promotion_at": "now()"
-            }).execute()
+                "last_promotion_at": _now()
+            }, on_conflict=CONCEPT_STATE_CONFLICT).execute()
         elif demoted:
             new_theta = min(new_theta, BUCKET_BOUNDS[current_bucket][1] - 0.01)
             sb.table("user_concept_state").upsert({
@@ -257,8 +275,8 @@ def submit_answer(request: AnswerSubmitRequest):
                 "current_bucket": current_bucket,
                 "streak_correct": streak_c,
                 "streak_incorrect": streak_i,
-                "last_demotion_at": "now()"
-            }).execute()
+                "last_demotion_at": _now()
+            }, on_conflict=CONCEPT_STATE_CONFLICT).execute()
         else:
             sb.table("user_concept_state").upsert({
                 "user_id": user_id,
@@ -267,7 +285,7 @@ def submit_answer(request: AnswerSubmitRequest):
                 "current_bucket": current_bucket,
                 "streak_correct": streak_c,
                 "streak_incorrect": streak_i
-            }).execute()
+            }, on_conflict=CONCEPT_STATE_CONFLICT).execute()
 
     else:
         # Anonymous users or no concept_id
@@ -349,12 +367,15 @@ def submit_answer(request: AnswerSubmitRequest):
         "misconception_tag": None
     }
     
+    # Field names here have to match AnswerSubmitResponse, which is what the app reads
+    # (`res.correct` / `res.chapter_exhausted`); FastAPI validates the response against
+    # it, so a rename on either side turns every answer into a 500.
     return {
         "session_id": request.session_id,
-        "is_correct": request.is_correct,
+        "correct": request.is_correct,
         "solution": solution_dict,
         "next_question": next_q_dict,
-        "exhausted": exhausted
+        "chapter_exhausted": exhausted
     }
 @router.post("/session/report")
 def report_question(request: ReportRequest):

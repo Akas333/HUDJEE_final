@@ -5,12 +5,56 @@ from catsim.selection import MaxInfoSelector
 from catsim.initialization import FixedPointInitializer
 from catsim.item_bank import ItemBank
 
+THETA_MIN = -3.0
+THETA_MAX = 3.0
+
+# A response vector that is all correct (or all incorrect) has no finite maximum
+# likelihood estimate — the likelihood climbs monotonically towards ±infinity — and
+# catsim's numerical search answers by handing back half the seed it was given,
+# identically for a perfect and for a zero score. At the usual seed of 0.0 that reads
+# as a frozen theta: a student can answer a whole session correctly and have their
+# mastery written back unmoved.
+#
+# For those vectors we use the textbook remedy instead — the posterior mode under a
+# standard normal population prior. It is always finite, it rises with the length of
+# the streak, and it weighs the difficulty of the items that were actually answered,
+# so a clean run on hard questions moves theta further than one on easy questions.
+#
+# Like the MLE path it depends only on the responses and the item parameters, never on
+# the incoming estimate. That matters: Practice re-fits the entire session on every
+# answer, so an estimate that stepped off the *running* theta would compound with each
+# re-fit and pin a student at the ceiling within a few questions.
+DEGENERATE_PRIOR_MEAN = 0.0
+DEGENERATE_PRIOR_SD = 1.0
+
 def get_initial_theta() -> float:
     """
     Returns the default starting theta for a new user.
     """
     initializer = FixedPointInitializer(0.0)
     return float(initializer.initialize())
+
+def _map_estimate(responses: List[Tuple[float, float, float, int]]) -> float:
+    """
+    Posterior mode of theta under a N(DEGENERATE_PRIOR_MEAN, DEGENERATE_PRIOR_SD)
+    prior, found by a dense grid search over the usable theta range.
+    """
+    params = np.array([[a, b, c, u] for a, b, c, u in responses], dtype=float)
+    a = params[:, 0:1]
+    b = params[:, 1:2]
+    c = params[:, 2:3]
+    u = params[:, 3:4]
+
+    grid = np.linspace(THETA_MIN, THETA_MAX, 1201)
+
+    # 3PL probability of a correct response, one row per item, one column per grid point.
+    p = c + (1.0 - c) / (1.0 + np.exp(-a * (grid - b)))
+    p = np.clip(p, 1e-9, 1.0 - 1e-9)
+
+    log_likelihood = (u * np.log(p) + (1.0 - u) * np.log1p(-p)).sum(axis=0)
+    log_prior = -((grid - DEGENERATE_PRIOR_MEAN) ** 2) / (2.0 * DEGENERATE_PRIOR_SD ** 2)
+
+    return float(grid[np.argmax(log_likelihood + log_prior)])
 
 def estimate_theta(
     responses: List[Tuple[float, float, float, int]], 
@@ -27,7 +71,11 @@ def estimate_theta(
     """
     if not responses:
         return initial_theta
-        
+
+    if len({u for *_, u in responses}) == 1:
+        # All right or all wrong — no MLE exists, so fall back to the posterior mode.
+        return _map_estimate(responses)
+
     # catsim expects items as a numpy array of shape (N, 4)
     # columns: [discrimination, difficulty, pseudo-guessing, upper_asymptote]
     items = []
