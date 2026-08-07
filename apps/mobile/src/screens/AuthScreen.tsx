@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 
+import SubjectBackdrop from '../components/SubjectBackdrop';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { DEFAULT_TINT } from '../theme/subjects';
 import { createSessionFromUrl, signInWithGoogle } from '../lib/googleAuth';
 import { isGuestSignInAvailable, signInAsGuest } from '../lib/guestAuth';
 import { useToastStore } from '../services/ToastService';
@@ -71,11 +72,10 @@ export default function AuthScreen() {
     if (loading) return;
     setLoading(true);
     try {
-      const session = await signInWithGoogle();
-      // A null session means the student backed out of the Google sheet.
-      // That's not a failure, so stay quiet.
-      if (session) showToast('Welcome to HudJee', 'success');
-      // AppNavigator swaps to the main tabs via onAuthStateChange.
+      await signInWithGoogle();
+      // No success toast: AppNavigator swaps to the main tabs via
+      // onAuthStateChange, and landing on Home is the confirmation. A banner
+      // over the greeting only gets in the way of it. Failures still speak up.
     } catch (e: any) {
       showToast(e?.message ?? 'Sign in failed. Please try again.', 'error');
     } finally {
@@ -88,8 +88,7 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       await signInAsGuest();
-      showToast('Signed in as guest', 'success');
-      // AppNavigator swaps to the main tabs via onAuthStateChange.
+      // Silent on success, for the same reason as the Google path above.
     } catch (e: any) {
       showToast(e?.message ?? 'Guest sign in failed.', 'error');
     } finally {
@@ -99,12 +98,9 @@ export default function AuthScreen() {
 
   return (
     <View style={styles.container}>
-      <LinearGradient
-        colors={['#1E1B4B', '#0B0B0C', '#0B0B0C']}
-        start={{ x: 0.2, y: 0.1 }}
-        end={{ x: 0.8, y: 0.8 }}
-        style={StyleSheet.absoluteFill}
-      />
+      {/* The same wash the splash fades in on and every screen after sign-in
+          carries, rather than a second hand-mixed copy of it. */}
+      <SubjectBackdrop color={DEFAULT_TINT} />
 
       <View style={styles.hero}>
         <Image

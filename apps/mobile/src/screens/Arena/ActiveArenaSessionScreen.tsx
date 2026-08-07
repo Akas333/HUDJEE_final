@@ -1,472 +1,643 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Animated,
   Modal,
-  PanResponder
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, CheckCircle, ArrowRight, Zap, Target, BookOpen } from 'lucide-react-native';
+import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
+import { Check, Clock, Lock, SkipForward, Target, X } from 'lucide-react-native';
+
+import PressableScale from '../../components/PressableScale';
+import SubjectBackdrop from '../../components/SubjectBackdrop';
 import { colors } from '../../theme/colors';
-import { Question, ArenaAnswerResponse, ArenaSessionSummary } from '../../services/api.mock';
-import { EngineApi } from '../../services/api';
+import { typography } from '../../theme/typography';
+import { SUBJECT_COLORS, SubjectKey, tintFor } from '../../theme/subjects';
+import {
+  DIVIDER,
+  GAP,
+  GUTTER,
+  MODE_BY_ID,
+  NEGATIVE,
+  POSITIVE,
+  RADIUS,
+  SUBJECT_LABELS,
+  SUBJECT_SHORT,
+  SURFACE,
+  SURFACE_BORDER,
+  SURFACE_STRONG,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  TRACK,
+  formatClock,
+} from '../../theme/arena';
+import { SubjectRuntime, useArenaSessionStore } from '../../store/arenaSessionStore';
+import { HapticService } from '../../services/HapticService';
 
-const MathText = ({ content, style }: { content: string, style?: any }) => {
-  return <Text style={[style, { fontFamily: 'System' }]}>{content}</Text>;
-};
+const CORRECT_ADVANCE_MS = 900;
 
-export default function ActiveArenaSessionScreen({ navigation, route }: any) {
-  const { chapterIds, timedMode } = route.params || { chapterIds: ['c1'], timedMode: false };
-  
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [currentQ, setCurrentQ] = useState<Question | null>(null);
-  
-  const [status, setStatus] = useState<'loading' | 'answering' | 'correct' | 'incorrect' | 'summary'>('loading');
-  const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [answerData, setAnswerData] = useState<ArenaAnswerResponse | null>(null);
-  const [summaryData, setSummaryData] = useState<ArenaSessionSummary | null>(null);
-  
-  const [rating, setRating] = useState(0);
+// ─── subject switcher ────────────────────────────────────────────────────────
 
-  // Animations
-  const deltaOpacity = useRef(new Animated.Value(0)).current;
-  const deltaTranslateY = useRef(new Animated.Value(10)).current;
-  const [deltaText, setDeltaText] = useState('');
-  const [deltaColor, setDeltaColor] = useState(colors.success);
-
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  
-  // Timer state
-  const [timeLeft, setTimeLeft] = useState(60);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Stop Timer
-  const stopTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  // Start Timer
-  const startTimer = () => {
-    stopTimer();
-    if (!timedMode) return;
-    
-    setTimeLeft(60);
-    timerRef.current = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          stopTimer();
-          handleTimeout();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const showDelta = (delta: number) => {
-    const isPos = delta >= 0;
-    setDeltaText(isPos ? `+${delta}` : `${delta}`);
-    setDeltaColor(isPos ? colors.success : colors.tagRed);
-    
-    deltaOpacity.setValue(0);
-    deltaTranslateY.setValue(10);
-    
-    Animated.parallel([
-      Animated.timing(deltaOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(deltaTranslateY, { toValue: -10, duration: 400, useNativeDriver: true })
-    ]).start(() => {
-      Animated.timing(deltaOpacity, { toValue: 0, duration: 300, delay: 600, useNativeDriver: true }).start();
-    });
-  };
-
-  useEffect(() => {
-    const initSession = async () => {
-      setStatus('loading');
-      const r = await EngineApi.getArenaRating();
-      setRating(r.rating);
-
-      const res = await EngineApi.startArenaSession();
-      setSessionId(res.session_id);
-      setCurrentQ(res.first_question);
-      setStatus('answering');
-    };
-    initSession();
-    
-    return () => stopTimer();
-  }, [chapterIds, timedMode]);
-
-  useEffect(() => {
-    if (currentQ && status === 'answering') {
-      slideAnim.setValue(800);
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        friction: 8,
-        tension: 50
-      }).start();
-      startTimer();
-    }
-  }, [currentQ, status]);
-
-  const handleSelect = (index: number) => {
-    if (status !== 'answering') return;
-    setSelectedOption(index);
-  };
-
-  const handleTimeout = async () => {
-    // If timer runs out, auto-submit as incorrect
-    if (status !== 'answering' || !sessionId || !currentQ) return;
-    setStatus('loading');
-    
-    // We pass a dummy index (-1) which will naturally be incorrect
-    const res = await EngineApi.submitArenaAnswer();
-    
-    setAnswerData(res);
-    setRating(res.new_rating);
-    showDelta(res.rating_delta);
-    
-    setStatus('incorrect');
-  };
-
-  const handleSubmit = async () => {
-    if (status !== 'answering' || selectedOption === null || !sessionId || !currentQ) return;
-    
-    stopTimer();
-    setStatus('loading');
-    
-    const timeTakenMs = (60 - timeLeft) * 1000;
-    const res = await EngineApi.submitArenaAnswer();
-    
-    setAnswerData(res);
-    setRating(res.new_rating);
-    showDelta(res.rating_delta);
-
-    if (res.correct) {
-      setStatus('correct');
-      // Arena mode: FAST transition on correct
-      setTimeout(() => {
-        handleAdvance(res.next_question);
-      }, 600);
-    } else {
-      setStatus('incorrect');
-    }
-  };
-
-  const handleSkip = async () => {
-    if (status !== 'answering' || !sessionId || !currentQ) return;
-    
-    stopTimer();
-    setStatus('loading');
-    const res = await EngineApi.skipArenaQuestion();
-    handleAdvance(res.next_question);
-  };
-
-  const handleAdvance = (nextQ: Question | null) => {
-    if (nextQ) {
-      setCurrentQ(nextQ);
-      setSelectedOption(null);
-      setAnswerData(null);
-      setStatus('answering');
-    } else {
-      // Should not exhaust in Arena usually, but if it does, end session
-      handleExit();
-    }
-  };
-
-  const handleExit = async () => {
-    stopTimer();
-    if (sessionId) {
-      setStatus('loading');
-      const summary = await EngineApi.endArenaSession();
-      setSummaryData(summary);
-      setStatus('summary');
-    } else {
-      navigation.goBack();
-    }
-  };
-
-  // Swipe reel logic
-  const handleSwipeUp = () => {
-    Animated.timing(slideAnim, {
-      toValue: -800,
-      duration: 200,
-      useNativeDriver: true
-    }).start(() => {
-      if (status === 'answering') {
-        handleSkip();
-      } else if (status === 'incorrect' || status === 'correct') {
-        handleAdvance(answerData?.next_question || null);
-      }
-    });
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
-         return gestureState.dy < -40 && Math.abs(gestureState.vy) > 0.5;
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-         if (gestureState.dy < -50) {
-            handleSwipeUp();
-         } else {
-            Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true }).start();
-         }
-      }
-    })
-  ).current;
-
-  // ─── Renderers ──────────────────────────────────────────────────────────────
-
-  const renderTopBar = () => (
-    <View style={styles.header}>
-      <TouchableOpacity style={styles.closeBtn} onPress={handleExit}>
-        <X color={colors.textSecondary} size={24} />
-      </TouchableOpacity>
-      
-      <View style={styles.headerCenter}>
-        <View style={styles.ratingPill}>
-          <Zap color="#E8B84B" size={14} style={{ marginRight: 4 }} />
-          <Text style={styles.ratingText}>{rating}</Text>
-          <Animated.Text style={[
-            styles.deltaText, 
-            { color: deltaColor, opacity: deltaOpacity, transform: [{ translateY: deltaTranslateY }] }
-          ]}>
-            {deltaText}
-          </Animated.Text>
-        </View>
-        {timedMode && (
-          <View style={styles.timerBarBg}>
-            <View style={[styles.timerBarFill, { width: `${(timeLeft / 60) * 100}%`, backgroundColor: timeLeft <= 10 ? colors.tagRed : colors.primary }]} />
-          </View>
-        )}
-      </View>
-      
-      <View style={{ width: 32 }} />
-    </View>
-  );
-
-  const renderSummaryModal = () => {
-    if (!summaryData) return null;
-    const netChange = summaryData.rating_end - summaryData.rating_start;
-    const isNetPos = netChange >= 0;
-    
-    return (
-      <Modal visible={status === 'summary'} animationType="slide" transparent>
-        <View style={styles.modalBg}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Arena Session Complete</Text>
-            
-            <View style={styles.summaryRatingBox}>
-              <Text style={styles.summaryRatingVal}>{summaryData.rating_end}</Text>
-              <Text style={[styles.summaryRatingNet, { color: isNetPos ? colors.success : colors.tagRed }]}>
-                {isNetPos ? `+${netChange}` : `${netChange}`} Rating
-              </Text>
-            </View>
-
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <Text style={styles.statVal}>{summaryData.questions_answered}</Text>
-                <Text style={styles.statLbl}>Answered</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statVal}>{summaryData.accuracy}%</Text>
-                <Text style={styles.statLbl}>Accuracy</Text>
-              </View>
-            </View>
-            
-            {summaryData.weakest_concepts.length > 0 && (
-              <View style={styles.conceptList}>
-                <Text style={styles.conceptListTitle}>Weakest Concepts</Text>
-                {summaryData.weakest_concepts.map(wc => (
-                  <TouchableOpacity key={wc.concept_id} style={styles.weakConceptItem}>
-                    <Text style={styles.weakConceptText}>{wc.concept_name}</Text>
-                    <BookOpen color={colors.textSecondary} size={16} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.goBack()}>
-              <Text style={styles.primaryBtnText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  if (status === 'loading' && !currentQ) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        {renderTopBar()}
-        <View style={{ flex: 1, justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.primary} size="large" />
-        </View>
-      </SafeAreaView>
-    );
-  }
+/**
+ * The live readout for one subject: its own mastery, its own clock, its own
+ * progress toward its own target. Tapping it switches context — which costs
+ * nothing, because the subject being left simply stops being the active one.
+ */
+function SubjectPill({
+  runtime,
+  active,
+  compact,
+  onPress,
+}: {
+  runtime: SubjectRuntime;
+  active: boolean;
+  compact: boolean;
+  onPress: () => void;
+}) {
+  const accent = SUBJECT_COLORS[runtime.subject];
+  const locked = runtime.context.locked;
+  const target = runtime.context.target_count;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {renderTopBar()}
-      {renderSummaryModal()}
-
-      <Animated.View 
-        style={[styles.container, { transform: [{ translateY: slideAnim }] }]}
-        {...panResponder.panHandlers}
-      >
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {currentQ && (
-            <>
-              <MathText content={currentQ.prompt} style={styles.questionText} />
-
-              <View style={styles.optionsList}>
-                {currentQ.options?.map((opt, index) => {
-                  const isSelected = selectedOption === index;
-                  const isAnswering = status === 'answering';
-                  const isCorrect = status === 'correct' || status === 'incorrect';
-                  
-                  const isCorrectOption = isCorrect && index === (currentQ as any).correctIndex;
-
-                  let bgColor = colors.surface;
-                  let borderColor = colors.border;
-                  
-                  if (isCorrectOption && !isAnswering) {
-                    bgColor = '#34D39915';
-                    borderColor = '#34D399';
-                  } else if (isSelected && status === 'incorrect') {
-                    bgColor = colors.surfaceLight;
-                    borderColor = colors.border;
-                  } else if (isSelected && isAnswering) {
-                    borderColor = colors.primary;
-                  }
-
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      style={[styles.optionBtn, { backgroundColor: bgColor, borderColor }]}
-                      onPress={() => handleSelect(index)}
-                      activeOpacity={0.7}
-                      disabled={!isAnswering}
-                    >
-                      <MathText content={opt} style={styles.optionText} />
-                      {isCorrectOption && !isAnswering && <CheckCircle color="#34D399" size={20} />}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {status === 'incorrect' && answerData && (
-                <View style={styles.feedbackBox}>
-                  <Text style={styles.shortExplanationText}>{answerData.short_explanation}</Text>
-                  
-                  {answerData.weak_concept_nudge && (
-                    <TouchableOpacity style={styles.nudgeChip}>
-                      <Target color="#E8B84B" size={16} />
-                      <Text style={styles.nudgeChipText}>Weak on {answerData.weak_concept_nudge.concept_name} — Practice it</Text>
-                      <ArrowRight color={colors.textSecondary} size={14} style={{ marginLeft: 'auto' }} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-            </>
-          )}
-        </ScrollView>
-      </Animated.View>
-
-      <View style={styles.footer}>
-        {status === 'answering' && (
-          <>
-            <TouchableOpacity style={styles.skipBtn} onPress={handleSwipeUp}>
-              <Text style={styles.skipText}>I don't know / Skip</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.submitBtn, selectedOption === null && { opacity: 0.5 }]} 
-              onPress={handleSubmit}
-              disabled={selectedOption === null}
-            >
-              <Text style={styles.submitBtnText}>Submit</Text>
-            </TouchableOpacity>
-          </>
+    <PressableScale
+      onPress={onPress}
+      disabled={locked || active}
+      scaleTo={0.95}
+      style={[
+        styles.pill,
+        compact ? styles.pillCompact : styles.pillWide,
+        active && { backgroundColor: `${accent}26`, borderColor: `${accent}66` },
+        locked && styles.pillLocked,
+      ]}
+    >
+      <View style={styles.pillTop}>
+        {locked ? (
+          <Lock color={TEXT_FAINT} size={11} strokeWidth={2.2} />
+        ) : (
+          <View style={[styles.pillDot, { backgroundColor: accent }]} />
         )}
-
-        {status === 'incorrect' && (
-          <View style={styles.swipeHintContainer}>
-            <Text style={styles.swipeHintText}>Swipe up for next question</Text>
-          </View>
-        )}
-        
-        {status === 'correct' && (
-          <View style={styles.swipeHintContainer}>
-            <Text style={[styles.swipeHintText, { color: colors.success }]}>Correct! Getting next...</Text>
-          </View>
-        )}
+        <Text style={[styles.pillLabel, active && { color: accent }]}>
+          {compact ? SUBJECT_SHORT[runtime.subject] : SUBJECT_LABELS[runtime.subject]}
+        </Text>
       </View>
-    </SafeAreaView>
+
+      <View style={styles.pillReadout}>
+        <Text style={[styles.pillMastery, active && { color: accent }]}>
+          {runtime.context.mastery_pct}
+        </Text>
+        {runtime.masteryDelta ? (
+          <Animated.Text
+            entering={FadeIn.duration(160)}
+            exiting={FadeOut.duration(240)}
+            style={[
+              styles.pillDelta,
+              { color: runtime.masteryDelta > 0 ? POSITIVE : NEGATIVE },
+            ]}
+          >
+            {runtime.masteryDelta > 0 ? `+${runtime.masteryDelta}` : runtime.masteryDelta}
+          </Animated.Text>
+        ) : null}
+      </View>
+
+      <Text style={styles.pillMeta}>
+        {locked && target
+          ? `Done ${target}/${target}`
+          : target
+            ? `${runtime.context.questions_answered}/${target}`
+            : formatClock(Math.floor(runtime.elapsedMs / 1000))}
+      </Text>
+    </PressableScale>
   );
 }
 
+// ─── screen ──────────────────────────────────────────────────────────────────
+
+export default function ActiveArenaSessionScreen({ navigation, route }: any) {
+  const config = route.params?.config;
+
+  const status = useArenaSessionStore((s) => s.status);
+  const error = useArenaSessionStore((s) => s.error);
+  const mode = useArenaSessionStore((s) => s.mode);
+  const subjects = useArenaSessionStore((s) => s.subjects);
+  const runtime = useArenaSessionStore((s) => s.runtime);
+  const activeSubject = useArenaSessionStore((s) => s.activeSubject);
+  const remainingSeconds = useArenaSessionStore((s) => s.remainingSeconds);
+  const totalTarget = useArenaSessionStore((s) => s.totalTarget);
+  const summary = useArenaSessionStore((s) => s.summary);
+
+  const start = useArenaSessionStore((s) => s.start);
+  const switchSubject = useArenaSessionStore((s) => s.switchSubject);
+  const select = useArenaSessionStore((s) => s.select);
+  const submit = useArenaSessionStore((s) => s.submit);
+  const skip = useArenaSessionStore((s) => s.skip);
+  const advance = useArenaSessionStore((s) => s.advance);
+  const tick = useArenaSessionStore((s) => s.tick);
+  const end = useArenaSessionStore((s) => s.end);
+  const reset = useArenaSessionStore((s) => s.reset);
+
+  const [confirmExit, setConfirmExit] = useState(false);
+
+  // One session per entry into this screen.
+  useEffect(() => {
+    if (config) start(config);
+    return () => reset();
+  }, []);
+
+  // The one clock in the app that drives every other clock in the session: the
+  // store decides which of them it belongs to.
+  useEffect(() => {
+    if (status !== 'active') return;
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [status, tick]);
+
+  // Leaving mid-session is a decision, not a swipe.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (status === 'active') {
+        setConfirmExit(true);
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, [status]);
+
+  useEffect(() => {
+    if (status === 'ended') {
+      navigation.replace('ArenaSummary', { summary });
+    }
+  }, [status, summary]);
+
+  const active = activeSubject ? runtime[activeSubject] : null;
+
+  // A correct answer moves on by itself; a wrong one waits, because the solution
+  // is the point of getting it wrong.
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (advanceTimer.current) {
+      clearTimeout(advanceTimer.current);
+      advanceTimer.current = null;
+    }
+    if (active?.status === 'answered' && active.correct) {
+      HapticService.success();
+      advanceTimer.current = setTimeout(() => advance(), CORRECT_ADVANCE_MS);
+    } else if (active?.status === 'answered' && active.correct === false) {
+      HapticService.error();
+    }
+    return () => {
+      if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    };
+  }, [active?.status, active?.correct, active?.question?.question_id]);
+
+  const totalAnswered = useMemo(
+    () => Object.values(runtime).reduce((sum, r) => sum + r.context.questions_answered, 0),
+    [runtime]
+  );
+
+  const accent = activeSubject ? SUBJECT_COLORS[activeSubject] : colors.hudjeeTextSecondary;
+  const modeMeta = mode ? MODE_BY_ID[mode] : null;
+
+  const shell = (children: React.ReactNode) => (
+    <View style={styles.root}>
+      {/* The wash follows the active subject, so switching contexts is something
+          you feel before you read a single number. */}
+      <SubjectBackdrop color={tintFor(activeSubject as SubjectKey)} />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>{children}</SafeAreaView>
+    </View>
+  );
+
+  if (status === 'starting' || status === 'idle') {
+    return shell(
+      <View style={styles.centered}>
+        <ActivityIndicator color={POSITIVE} size="large" />
+        <Text style={styles.centeredText}>Setting up your contexts…</Text>
+      </View>
+    );
+  }
+
+  if (status === 'error') {
+    return shell(
+      <View style={styles.centered}>
+        <Text style={styles.centeredTitle}>Could not start</Text>
+        <Text style={styles.centeredText}>{error}</Text>
+        <PressableScale onPress={() => navigation.goBack()} style={styles.secondaryButton}>
+          <Text style={styles.secondaryText}>Back to setup</Text>
+        </PressableScale>
+      </View>
+    );
+  }
+
+  if (status === 'ending') {
+    return shell(
+      <View style={styles.centered}>
+        <ActivityIndicator color={POSITIVE} size="large" />
+        <Text style={styles.centeredText}>Wrapping up…</Text>
+      </View>
+    );
+  }
+
+  const options = Array.isArray(active?.question?.options) ? active!.question!.options! : [];
+  const answering = active?.status === 'answering';
+  const answered = active?.status === 'answered';
+
+  return shell(
+    <>
+      {/* ── Top bar: how the session as a whole is going ── */}
+      <View style={styles.topBar}>
+        <PressableScale scaleTo={0.9} style={styles.closeButton} onPress={() => setConfirmExit(true)}>
+          <X color={TEXT_MUTED} size={19} strokeWidth={2} />
+        </PressableScale>
+
+        <View style={styles.topStats}>
+          {remainingSeconds !== null && (
+            <View style={styles.topStat}>
+              <Clock
+                color={remainingSeconds <= 60 ? NEGATIVE : TEXT_MUTED}
+                size={14}
+                strokeWidth={2}
+              />
+              <Text
+                style={[styles.topStatText, remainingSeconds <= 60 && { color: NEGATIVE }]}
+              >
+                {formatClock(remainingSeconds)}
+              </Text>
+            </View>
+          )}
+
+          {totalTarget ? (
+            <View style={styles.topStat}>
+              <Target color={TEXT_MUTED} size={14} strokeWidth={2} />
+              <Text style={styles.topStatText}>
+                {totalAnswered}/{totalTarget}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.topStat}>
+              <Target color={TEXT_MUTED} size={14} strokeWidth={2} />
+              <Text style={styles.topStatText}>{totalAnswered}</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.modeTag}>
+          <Text style={styles.modeTagText}>{modeMeta?.name.toUpperCase()}</Text>
+        </View>
+      </View>
+
+      {/* Global progress: the clock for timed modes, otherwise the count. */}
+      {(remainingSeconds !== null || totalTarget) && (
+        <View style={styles.globalTrack}>
+          <View
+            style={[
+              styles.globalFill,
+              {
+                backgroundColor: accent,
+                width:
+                  remainingSeconds !== null && modeMeta?.timed
+                    ? `${progressPct(remainingSeconds, useArenaSessionStore.getState().durationSeconds)}%`
+                    : `${Math.min(100, (totalAnswered / (totalTarget || 1)) * 100)}%`,
+              },
+            ]}
+          />
+        </View>
+      )}
+
+      {/* ── Subject switcher, or one wide bar when the session is single-subject ── */}
+      <View style={styles.switcher}>
+        {subjects.map((subject) => (
+          <SubjectPill
+            key={subject}
+            runtime={runtime[subject]}
+            active={subject === activeSubject}
+            compact={subjects.length > 1}
+            onPress={() => switchSubject(subject)}
+          />
+        ))}
+      </View>
+
+      {/* ── The question ── */}
+      {active?.status === 'loading' ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={accent} />
+        </View>
+      ) : active?.status === 'exhausted' || !active?.question ? (
+        <View style={styles.centered}>
+          <Text style={styles.centeredTitle}>Nothing left here</Text>
+          <Text style={styles.centeredText}>
+            {subjects.length > 1
+              ? 'You have cleared every question in this subject’s selection. Switch subjects, or end the session.'
+              : 'You have cleared every question in this selection.'}
+          </Text>
+          <PressableScale onPress={() => end('manual')} style={styles.secondaryButton}>
+            <Text style={styles.secondaryText}>End session</Text>
+          </PressableScale>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View key={active.question.question_id} entering={FadeInDown.duration(260)}>
+            <Text style={styles.prompt}>{active.question.prompt}</Text>
+
+            <View style={{ gap: GAP, marginTop: 24 }}>
+              {options.map((option, index) => {
+                const isSelected = active.selectedOption === index;
+                const showResult = answered;
+                const isWrongPick = showResult && isSelected && active.correct === false;
+                const isRightPick = showResult && isSelected && active.correct === true;
+
+                return (
+                  <PressableScale
+                    key={index}
+                    onPress={() => select(index)}
+                    disabled={!answering}
+                    scaleTo={0.985}
+                    style={[
+                      styles.option,
+                      isSelected && answering && { borderColor: `${accent}88`, backgroundColor: `${accent}18` },
+                      isRightPick && { borderColor: `${POSITIVE}99`, backgroundColor: 'rgba(63,232,166,0.10)' },
+                      isWrongPick && { borderColor: `${NEGATIVE}99`, backgroundColor: 'rgba(248,113,113,0.10)' },
+                    ]}
+                  >
+                    <Text style={styles.optionLetter}>{String.fromCharCode(65 + index)}</Text>
+                    <Text style={styles.optionText}>{String(option)}</Text>
+                    {isRightPick && <Check color={POSITIVE} size={17} strokeWidth={2.6} />}
+                  </PressableScale>
+                );
+              })}
+            </View>
+
+            {answered && active.correct === false && active.solution ? (
+              <Animated.View entering={FadeIn.duration(200)} style={styles.solutionCard}>
+                <Text style={styles.solutionTitle}>Solution</Text>
+                {active.solution.steps.map((step, i) => (
+                  <Text key={i} style={styles.solutionStep}>
+                    {step}
+                  </Text>
+                ))}
+              </Animated.View>
+            ) : null}
+          </Animated.View>
+        </ScrollView>
+      )}
+
+      {/* ── Action bar ── */}
+      {active?.question && (
+        <View style={styles.footer}>
+          {answering && (
+            <>
+              <PressableScale onPress={skip} scaleTo={0.95} style={styles.skipButton}>
+                <SkipForward color={TEXT_MUTED} size={15} strokeWidth={2} />
+                <Text style={styles.skipText}>Skip</Text>
+              </PressableScale>
+
+              <PressableScale
+                onPress={submit}
+                disabled={active.selectedOption === null}
+                scaleTo={0.97}
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: active.selectedOption === null ? SURFACE_STRONG : accent },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.submitText,
+                    { color: active.selectedOption === null ? TEXT_FAINT : '#0B0B0C' },
+                  ]}
+                >
+                  Submit
+                </Text>
+              </PressableScale>
+            </>
+          )}
+
+          {answered && active.correct === false && (
+            <PressableScale onPress={advance} scaleTo={0.97} style={[styles.submitButton, styles.nextButton]}>
+              <Text style={[styles.submitText, { color: '#0B0B0C' }]}>Next question</Text>
+            </PressableScale>
+          )}
+
+          {answered && active.correct === true && (
+            <View style={styles.correctBanner}>
+              <Check color={POSITIVE} size={16} strokeWidth={2.6} />
+              <Text style={styles.correctText}>Correct</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* ── Leaving ── */}
+      <Modal visible={confirmExit} transparent animationType="fade">
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>End this session?</Text>
+            <Text style={styles.modalText}>
+              Everything you have answered is already saved. You will get the summary next.
+            </Text>
+            <View style={styles.modalActions}>
+              <PressableScale
+                onPress={() => setConfirmExit(false)}
+                scaleTo={0.96}
+                style={[styles.modalButton, { backgroundColor: SURFACE_STRONG }]}
+              >
+                <Text style={[styles.modalButtonText, { color: TEXT }]}>Keep going</Text>
+              </PressableScale>
+              <PressableScale
+                onPress={() => {
+                  setConfirmExit(false);
+                  end('manual');
+                }}
+                scaleTo={0.96}
+                style={[styles.modalButton, { backgroundColor: accent }]}
+              >
+                <Text style={[styles.modalButtonText, { color: '#0B0B0C' }]}>End session</Text>
+              </PressableScale>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+/** How much of a timed session has been spent, as a percentage. */
+function progressPct(remainingSeconds: number, durationSeconds: number | null): number {
+  if (!durationSeconds) return 0;
+  return Math.max(0, Math.min(100, ((durationSeconds - remainingSeconds) / durationSeconds) * 100));
+}
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
-  closeBtn: { padding: 4 },
-  headerCenter: { alignItems: 'center', justifyContent: 'center' },
-  ratingPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: colors.border, position: 'relative' },
-  ratingText: { color: colors.text, fontSize: 16, fontWeight: '800' },
-  deltaText: { position: 'absolute', right: -35, top: 4, fontSize: 14, fontWeight: '700' },
-  timerBarBg: { width: 100, height: 4, backgroundColor: colors.surfaceLight, borderRadius: 2, marginTop: 8, overflow: 'hidden' },
-  timerBarFill: { height: '100%', borderRadius: 2 },
-  
+  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  safeArea: { flex: 1 },
   container: { flex: 1 },
-  content: { padding: 20, paddingBottom: 40 },
-  
-  questionText: { color: colors.text, fontSize: 18, lineHeight: 28, fontWeight: '500', marginBottom: 24 },
-  
-  optionsList: { gap: 12 },
-  optionBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderRadius: 12, borderWidth: 1 },
-  optionText: { color: colors.text, fontSize: 16, flex: 1, marginRight: 12 },
-  
-  feedbackBox: { marginTop: 24, padding: 16, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  shortExplanationText: { color: colors.text, fontSize: 15, lineHeight: 22, fontWeight: '500', marginBottom: 16 },
-  nudgeChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#E8B84B15', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E8B84B40' },
-  nudgeChipText: { color: '#E8B84B', fontSize: 14, fontWeight: '600' },
-  
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
-  skipBtn: { padding: 12 },
-  skipText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
-  submitBtn: { backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 100 },
-  submitBtnText: { color: '#000', fontSize: 15, fontWeight: '700' },
-  
-  swipeHintContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
-  swipeHintText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600', letterSpacing: 0.5 },
+  content: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 32 },
 
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 16 },
-  summaryCard: { backgroundColor: colors.surface, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: colors.border },
-  summaryTitle: { color: colors.textSecondary, fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, textAlign: 'center', marginBottom: 24 },
-  
-  summaryRatingBox: { alignItems: 'center', marginBottom: 32 },
-  summaryRatingVal: { color: colors.text, fontSize: 64, fontWeight: '800', letterSpacing: -2, lineHeight: 70 },
-  summaryRatingNet: { fontSize: 18, fontWeight: '700' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: GUTTER, gap: 10 },
+  centeredTitle: { color: TEXT, fontSize: 18, fontFamily: typography.bold, letterSpacing: -0.3 },
+  centeredText: {
+    color: TEXT_MUTED,
+    fontSize: 14,
+    fontFamily: typography.regular,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
 
-  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  statBox: { flex: 1, backgroundColor: colors.surfaceLight, padding: 16, borderRadius: 12, alignItems: 'center' },
-  statVal: { color: colors.text, fontSize: 24, fontWeight: '700', marginBottom: 4 },
-  statLbl: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
-  
-  conceptList: { paddingVertical: 16, borderTopWidth: 1, borderTopColor: colors.border, marginBottom: 12 },
-  conceptListTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12 },
-  weakConceptItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surfaceLight, padding: 16, borderRadius: 8, marginBottom: 8 },
-  weakConceptText: { color: colors.text, fontSize: 14, fontWeight: '500' },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: GUTTER,
+    paddingTop: 4,
+    paddingBottom: 14,
+  },
+  closeButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topStats: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  topStat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  topStatText: { color: TEXT_MUTED, fontSize: 14, fontFamily: typography.semiBold, letterSpacing: -0.2 },
+  modeTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+  },
+  modeTagText: { color: TEXT_FAINT, fontSize: 9, fontFamily: typography.bold, letterSpacing: 1 },
 
-  primaryBtn: { backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 16, borderRadius: 100, width: '100%', alignItems: 'center', marginTop: 12 },
-  primaryBtnText: { color: '#000', fontSize: 16, fontWeight: '700' },
+  globalTrack: {
+    height: 3,
+    marginHorizontal: GUTTER,
+    borderRadius: 2,
+    backgroundColor: TRACK,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  globalFill: { height: '100%', borderRadius: 2 },
+
+  switcher: { flexDirection: 'row', gap: 8, paddingHorizontal: GUTTER, marginBottom: 20 },
+  pill: {
+    backgroundColor: SURFACE,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  // Two or three subjects share the row; a single subject takes the whole width
+  // so the session never looks like it is missing a control.
+  pillCompact: { flex: 1 },
+  pillWide: { flex: 1, alignItems: 'flex-start' },
+  pillLocked: { opacity: 0.45 },
+  pillTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pillDot: { width: 5, height: 5, borderRadius: 2.5 },
+  pillLabel: { color: TEXT_MUTED, fontSize: 10, fontFamily: typography.bold, letterSpacing: 1 },
+  pillReadout: { flexDirection: 'row', alignItems: 'baseline', gap: 5, marginTop: 5 },
+  pillMastery: { color: TEXT, fontSize: 20, fontFamily: typography.bold, letterSpacing: -0.5 },
+  pillDelta: { fontSize: 11, fontFamily: typography.bold },
+  pillMeta: { color: TEXT_FAINT, fontSize: 10, fontFamily: typography.regular, marginTop: 2 },
+
+  prompt: { color: TEXT, fontSize: 17, fontFamily: typography.regular, lineHeight: 26 },
+
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+  },
+  optionLetter: { color: TEXT_FAINT, fontSize: 13, fontFamily: typography.bold, width: 16 },
+  optionText: { flex: 1, color: TEXT_MUTED, fontSize: 15, fontFamily: typography.regular, lineHeight: 21 },
+
+  solutionCard: {
+    marginTop: 22,
+    padding: 18,
+    borderRadius: RADIUS,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+  },
+  solutionTitle: { color: TEXT, fontSize: 14, fontFamily: typography.bold, marginBottom: 10 },
+  solutionStep: {
+    color: TEXT_MUTED,
+    fontSize: 14,
+    fontFamily: typography.regular,
+    lineHeight: 21,
+    marginBottom: 8,
+  },
+
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: GUTTER,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: SURFACE_BORDER,
+    backgroundColor: 'rgba(11,11,12,0.86)',
+  },
+  skipButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    backgroundColor: SURFACE,
+  },
+  skipText: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.semiBold },
+  submitButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 999 },
+  nextButton: { backgroundColor: '#F5F5F7' },
+  submitText: { fontSize: 15, fontFamily: typography.bold, letterSpacing: -0.2 },
+  correctBanner: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16 },
+  correctText: { color: POSITIVE, fontSize: 14, fontFamily: typography.bold },
+
+  secondaryButton: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    backgroundColor: SURFACE,
+  },
+  secondaryText: { color: TEXT, fontSize: 14, fontFamily: typography.semiBold },
+
+  modalScrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: GUTTER },
+  modalCard: {
+    backgroundColor: '#16161A',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: DIVIDER,
+    padding: 24,
+  },
+  modalTitle: { color: TEXT, fontSize: 18, fontFamily: typography.bold, marginBottom: 8 },
+  modalText: { color: TEXT_MUTED, fontSize: 14, fontFamily: typography.regular, lineHeight: 20 },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 22 },
+  modalButton: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 999 },
+  modalButtonText: { fontSize: 14, fontFamily: typography.bold },
 });

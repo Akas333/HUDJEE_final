@@ -1,39 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors } from '../../theme/colors';
 
-export default function ExtrasTestSeriesScreen({ navigation }: any) {
+import PlaceholderScreen from '../../components/ui/PlaceholderScreen';
+import { TEST_TINT } from '../../theme/ui';
+
+export default function ExtrasTestSeriesScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ExtrasTestSeriesScreen</Text>
-      <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-        <Text style={styles.buttonText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
+    <PlaceholderScreen
+      eyebrow="Test"
+      title="Extras"
+      blurb="Papers outside the main course series."
+      tint={TEST_TINT}
+      planned={[
+        "Topic drills and speed papers",
+        "Papers you build from your own weak chapters",
+        "Anything the course series does not cover",
+      ]}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  }
-});

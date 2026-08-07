@@ -1,39 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors } from '../../theme/colors';
 
-export default function UnitCardScreen({ navigation }: any) {
+import PlaceholderScreen from '../../components/ui/PlaceholderScreen';
+import { DEFAULT_TINT } from '../../theme/subjects';
+
+export default function UnitCardScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>UnitCardScreen</Text>
-      <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-        <Text style={styles.buttonText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
+    <PlaceholderScreen
+      eyebrow="Learn"
+      title="Unit"
+      blurb="A unit's chapters, with how far into each of them you are."
+      tint={DEFAULT_TINT}
+      planned={[
+        "Chapters in the unit, in syllabus order",
+        "Coverage and mastery for each one",
+        "Straight into practice for any chapter",
+      ]}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  }
-});

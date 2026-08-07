@@ -1,90 +1,82 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Dimensions } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect } from 'react';
+import { Dimensions, Image, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
+
+import SubjectBackdrop from '../../components/SubjectBackdrop';
 import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
+import { DEFAULT_TINT } from '../../theme/subjects';
+import { TEXT_MUTED } from '../../theme/ui';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+const FAST_OUT_SLOW_IN = Easing.bezier(0.4, 0, 0.2, 1);
 
+/** How long the mark holds before the sign-in screen replaces it. */
+const HOLD_MS = 2200;
+
+/**
+ * The splash. It drew its own three-stop gradient with the brand indigo hard
+ * coded, which meant the first thing the app ever showed was a near-match for
+ * the wash behind every screen after it rather than the wash itself — and it
+ * animated on the JS driver while the rest of the app runs on Reanimated.
+ */
 export default function OnboardingScreen({ navigation }: any) {
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const mark = useSharedValue(0);
+  // Its own value rather than a delayed read of `mark`: a delay applied inside
+  // an animated style re-runs on every frame of the value it reads.
+  const tagline = useSharedValue(0);
 
   useEffect(() => {
-    // Start animation on mount
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      })
-    ]).start();
+    mark.value = withTiming(1, { duration: 900, easing: FAST_OUT_SLOW_IN });
+    tagline.value = withDelay(320, withTiming(1, { duration: 600, easing: FAST_OUT_SLOW_IN }));
 
-    // Navigate to the Google sign-in screen after 3 seconds
-    const timer = setTimeout(() => {
-      navigation.replace('AuthScreen');
-    }, 3000);
-
+    const timer = setTimeout(() => navigation.replace('AuthScreen'), HOLD_MS);
     return () => clearTimeout(timer);
-  }, [fadeAnim, scaleAnim, navigation]);
+  }, [navigation, mark, tagline]);
+
+  const markStyle = useAnimatedStyle(() => ({
+    opacity: mark.value,
+    transform: [{ scale: 0.92 + mark.value * 0.08 }],
+  }));
+
+  const taglineStyle = useAnimatedStyle(() => ({ opacity: tagline.value }));
 
   return (
-    <View style={styles.container}>
-      {/* Background Gradient */}
-      <LinearGradient
-        // Simulating the radial glow from the design with a top-left to bottom-right linear gradient
-        colors={['#1E1B4B', '#0B0B0C', '#0B0B0C']}
-        start={{ x: 0.2, y: 0.1 }}
-        end={{ x: 0.8, y: 0.8 }}
-        style={styles.gradient}
-      />
-      
-      {/* Animated Logo Container */}
-      <Animated.View 
-        style={[
-          styles.logoContainer,
-          { 
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }]
-          }
-        ]}
-      >
-        <Animated.Image 
-          source={require('../../../assets/logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-      </Animated.View>
+    <View style={styles.root}>
+      <SubjectBackdrop color={DEFAULT_TINT} />
+
+      <View style={styles.centre}>
+        <Animated.View style={markStyle}>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </Animated.View>
+
+        <Animated.Text style={[styles.tagline, taglineStyle]}>
+          Adaptive JEE practice
+        </Animated.Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  gradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-  },
-  logoContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoImage: {
-    width: width * 0.6, // scale to 60% of screen width
-    height: 120,
+  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  centre: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  logo: { width: width * 0.58, height: 96, tintColor: colors.hudjeeTextPrimary },
+  tagline: {
+    color: TEXT_MUTED,
+    fontSize: 14,
+    fontFamily: typography.regular,
+    letterSpacing: 0.2,
+    marginTop: 14,
   },
 });

@@ -1,39 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors } from '../../theme/colors';
 
-export default function SyllabusAndReadinessScreen({ navigation }: any) {
+import PlaceholderScreen from '../../components/ui/PlaceholderScreen';
+import { TEST_TINT } from '../../theme/ui';
+
+export default function SyllabusAndReadinessScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>SyllabusAndReadinessScreen</Text>
-      <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-        <Text style={styles.buttonText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
+    <PlaceholderScreen
+      eyebrow="Test"
+      title="Syllabus and readiness"
+      blurb="What a paper covers, and how ready you are to sit it."
+      tint={TEST_TINT}
+      planned={[
+        "Chapter-by-chapter coverage for this paper",
+        "A readiness estimate per subject",
+        "The gaps worth closing before you start",
+      ]}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  }
-});

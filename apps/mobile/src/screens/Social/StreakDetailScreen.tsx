@@ -1,298 +1,235 @@
-import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Flame, Lock, Check, Snowflake } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Check } from 'lucide-react-native';
+
+import SubjectBackdrop from '../../components/SubjectBackdrop';
+import Skeleton from '../../components/Skeleton';
+import ChallengeHeader from '../../components/challenges/ChallengeHeader';
+import StreakGauge, { streakBandLabel } from '../../components/challenges/StreakGauge';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import { withAlpha } from '../../theme/subjects';
+import {
+  AT_RISK,
+  CHALLENGE_TINT,
+  GAP,
+  GUTTER,
+  RADIUS,
+  SECTION_GAP,
+  SURFACE,
+  SURFACE_BORDER,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  nextStreakMilestone,
+} from '../../theme/challenges';
 import { useChallengesStore } from '../../store/challengesStore';
-import Skeleton from '../../components/Skeleton';
-import { HapticService } from '../../services/HapticService';
+import { StreakDay } from '../../services/challengesApi';
 
-export default function StreakDetailScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { streak } = useChallengesStore();
-  const fetchStreak = useChallengesStore((state) => (state as any).fetchStreak);
-  const isLoading = !streak;
+// The streak, in full. Five Sunday-aligned weeks rather than a scrolling year:
+// the question this screen answers is "am I keeping this up?", and that is a
+// month-shaped question.
 
-  useEffect(() => {
-    if (fetchStreak) {
-      fetchStreak();
+const enter = (index: number) =>
+  FadeInDown.springify().damping(18).mass(0.6).delay(Math.min(index, 8) * 45);
+
+const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+export default function StreakDetailScreen({ navigation }: any) {
+  const streak = useChallengesStore((s) => s.streak);
+  const load = useChallengesStore((s) => s.load);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!streak) load();
+    }, [streak, load])
+  );
+
+  const days = streak?.current ?? 0;
+  const atRisk = !!streak?.atRisk;
+
+  // Five rows of seven, oldest first — the API hands the grid over already
+  // aligned so the columns line up under the weekday letters.
+  const weeks: StreakDay[][] = [];
+  if (streak) {
+    for (let i = 0; i < streak.calendar.length; i += 7) {
+      weeks.push(streak.calendar.slice(i, i + 7));
     }
-  }, [fetchStreak]);
+  }
 
-  const handleBack = () => {
-    HapticService.light();
-    navigation.goBack();
-  };
-
-  const heatmapGrid = useMemo(() => {
-    // 12 weeks * 7 days = 84 cells. 
-    // Fill pseudo-randomly to represent activity
-    const days = [];
-    for (let i = 0; i < 84; i++) {
-      // make recent days more active, older days sparse
-      const isActive = Math.random() > 0.4;
-      days.push({ active: isActive });
-    }
-    return days;
-  }, []);
-
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <Skeleton width={150} height={150} borderRadius={75} />
-          <View style={styles.statsRow}>
-            <Skeleton width="45%" height={80} borderRadius={16} />
-            <Skeleton width="45%" height={80} borderRadius={16} />
-          </View>
-          <Skeleton width="100%" height={250} borderRadius={16} style={{ marginTop: 24 }} />
-        </View>
-      );
-    }
-
-    if (!streak) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No streak data available.</Text>
-        </View>
-      );
-    }
-
-    const currentStreak = streak.current_streak ?? 12;
-    const freezesAvailable = streak.freezes_available ?? 1;
-    const milestones = [7, 30, 100, 365];
-
-    return (
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* Large streak number + flame */}
-        <View style={styles.heroSection}>
-          <Flame size={48} color={colors.hudjeeMilestoneStart} style={styles.heroIcon} />
-          <Text style={styles.streakNumber}>{currentStreak}</Text>
-          <Text style={styles.streakLabel}>Day Streak</Text>
-        </View>
-
-        {/* Activity Heatmap */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Activity</Text>
-          <View style={styles.heatmapGrid}>
-            {heatmapGrid.map((day, index) => (
-              <View 
-                key={index} 
-                style={[
-                  styles.heatmapCell, 
-                  day.active ? styles.heatmapCellActive : styles.heatmapCellEmpty
-                ]} 
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* Freeze Section */}
-        <View style={styles.freezeCard}>
-          <View style={styles.freezeHeader}>
-            <Snowflake color={colors.frozenBlue} size={24} />
-            <Text style={styles.freezeTitle}>{freezesAvailable} Freeze available</Text>
-          </View>
-          <Text style={styles.freezeDescription}>
-            Maintains your streak if you miss a day. Earn more at milestones.
-          </Text>
-        </View>
-
-        {/* Milestones */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Milestones</Text>
-          <View style={styles.milestoneList}>
-            {milestones.map((m) => {
-              const reached = currentStreak >= m;
-              return (
-                <View key={m} style={[styles.milestoneItem, reached && styles.milestoneReached]}>
-                  <View style={[styles.milestoneIcon, reached && styles.milestoneIconReached]}>
-                    {reached ? (
-                      <Check color={colors.hudjeeBgBase} size={20} />
-                    ) : (
-                      <Lock color={colors.hudjeeTextSecondary} size={20} />
-                    )}
-                  </View>
-                  <View style={styles.milestoneInfo}>
-                    <Text style={[styles.milestoneText, reached && styles.milestoneTextReached]}>
-                      {m} Days
-                    </Text>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      </ScrollView>
-    );
-  };
+  const activeDays = streak?.calendar.filter((d) => d.active).length ?? 0;
 
   return (
-    <SafeAreaView edges={['top']} style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <ChevronLeft color={colors.hudjeeTextPrimary} size={24} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Your Streak</Text>
-        <View style={styles.headerRight} />
-      </View>
-      {renderContent()}
-    </SafeAreaView>
+    <View style={styles.root}>
+      <SubjectBackdrop color={CHALLENGE_TINT} />
+
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <ChallengeHeader
+            eyebrow="STREAK LEDGER"
+            title={days > 0 ? `${days} day${days === 1 ? '' : 's'}` : 'No streak yet'}
+            subtitle={
+              atRisk
+                ? "Nothing logged today yet — one set keeps the run alive."
+                : days > 0
+                  ? streakBandLabel(days)
+                  : 'Answer a few questions today and the count starts.'
+            }
+            onBack={() => navigation.goBack()}
+          />
+
+          {!streak ? (
+            <Skeleton width="100%" height={196} borderRadius={RADIUS} />
+          ) : (
+            <Animated.View entering={enter(2)} style={styles.gaugeCard}>
+              <StreakGauge days={days} atRisk={atRisk} size={132} stroke={11} />
+              <Text style={styles.gaugeCaption}>
+                {days > 0
+                  ? `${nextStreakMilestone(days) - days} day${
+                      nextStreakMilestone(days) - days === 1 ? '' : 's'
+                    } to ${nextStreakMilestone(days)}`
+                  : 'First day is the hard one'}
+              </Text>
+            </Animated.View>
+          )}
+
+          <Animated.View entering={enter(3)} style={styles.statRow}>
+            <Stat label="current" value={`${days}`} />
+            <Stat label="best run" value={`${streak?.longest ?? 0}`} />
+            <Stat label="active in 5 weeks" value={`${activeDays}`} />
+          </Animated.View>
+
+          {/* Calendar */}
+          <Animated.View entering={enter(4)} style={styles.calendarCard}>
+            <View style={styles.weekdayRow}>
+              {WEEKDAYS.map((label, i) => (
+                <Text key={`${label}-${i}`} style={styles.weekdayLabel}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+
+            {weeks.map((week, wi) => (
+              <View key={wi} style={styles.weekRow}>
+                {week.map((day) => (
+                  <View key={day.key} style={styles.dayCell}>
+                    <View
+                      style={[
+                        styles.dayGlyph,
+                        day.active && styles.dayGlyphActive,
+                        day.isFuture && styles.dayGlyphFuture,
+                        day.isToday && styles.dayGlyphToday,
+                      ]}
+                    >
+                      {day.active ? <Check color="#0B0B0C" size={13} strokeWidth={3} /> : null}
+                    </View>
+                    <Text style={[styles.dayNum, day.isToday && styles.dayNumToday]}>
+                      {new Date(day.date).getDate()}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </Animated.View>
+
+          <Animated.View entering={enter(5)} style={styles.noteCard}>
+            <Text style={styles.noteTitle}>What keeps it going</Text>
+            <Text style={styles.noteText}>
+              Any answering counts: a Practice session, an Arena run, or finishing a challenge set.
+              One question is enough to mark the day — the streak measures showing up, not volume.
+            </Text>
+          </Animated.View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.hudjeeBgBase,
-  },
-  header: {
-    flexDirection: 'row',
+  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  safeArea: { flex: 1 },
+  content: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 48 },
+
+  gaugeCard: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
-  },
-  headerTitle: {
-    ...typography.hudjee.headingMd,
-    color: colors.hudjeeTextPrimary,
-  },
-  headerRight: {
-    width: 40,
-  },
-  loadingContainer: {
-    flex: 1,
-    padding: 24,
-    alignItems: 'center',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    ...typography.hudjee.body,
-    color: colors.hudjeeTextSecondary,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingBottom: 60,
-  },
-  heroSection: {
-    alignItems: 'center',
-    marginVertical: 32,
-  },
-  heroIcon: {
-    marginBottom: 16,
-  },
-  streakNumber: {
-    ...typography.hudjee.display,
-    color: colors.hudjeeTextPrimary,
-    lineHeight: 52,
-  },
-  streakLabel: {
-    ...typography.hudjee.headingMd,
-    color: colors.hudjeeTextSecondary,
-    marginTop: 8,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    ...typography.hudjee.headingMd,
-    color: colors.hudjeeTextPrimary,
-    marginBottom: 16,
-  },
-  heatmapGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    justifyContent: 'center',
-  },
-  heatmapCell: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-  },
-  heatmapCellEmpty: {
-    backgroundColor: colors.hudjeeSurfaceCardElevated,
-  },
-  heatmapCellActive: {
-    backgroundColor: colors.hudjeeMilestoneStart,
-  },
-  freezeCard: {
-    backgroundColor: colors.hudjeeSurfaceCard,
-    borderRadius: 16,
+    gap: 16,
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
     borderWidth: 1,
-    borderColor: colors.hudjeeBorderSubtle,
-    borderBottomWidth: 5,
-    padding: 20,
-    marginBottom: 32,
+    borderColor: SURFACE_BORDER,
+    paddingVertical: 26,
   },
-  freezeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  freezeTitle: {
-    ...typography.hudjee.headingMd,
-    color: colors.hudjeeTextPrimary,
-    marginLeft: 12,
-  },
-  freezeDescription: {
-    ...typography.hudjee.body,
-    color: colors.hudjeeTextSecondary,
-    lineHeight: 20,
-  },
-  milestoneList: {
-    gap: 12,
-  },
-  milestoneItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.hudjeeSurfaceCard,
-    borderRadius: 16,
+  gaugeCaption: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.regular },
+
+  statRow: { flexDirection: 'row', gap: GAP, marginTop: GAP },
+  stat: {
+    flex: 1,
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
     borderWidth: 1,
-    borderColor: colors.hudjeeBorderSubtle,
+    borderColor: SURFACE_BORDER,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+  },
+  statValue: { color: TEXT, fontSize: 20, fontFamily: typography.bold, letterSpacing: -0.5 },
+  statLabel: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular, marginTop: 3 },
+
+  calendarCard: {
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
     padding: 16,
+    marginTop: SECTION_GAP,
   },
-  milestoneReached: {
-    borderColor: colors.hudjeeMilestoneStart,
+  weekdayRow: { flexDirection: 'row', marginBottom: 10 },
+  weekdayLabel: {
+    flex: 1,
+    color: TEXT_FAINT,
+    fontSize: 10,
+    fontFamily: typography.semiBold,
+    textAlign: 'center',
+    letterSpacing: 0.6,
   },
-  milestoneIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.hudjeeSurfaceCardElevated,
+  weekRow: { flexDirection: 'row', marginBottom: 8 },
+  dayCell: { flex: 1, alignItems: 'center', gap: 4 },
+  dayGlyph: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
-  milestoneIconReached: {
-    backgroundColor: colors.hudjeeMilestoneStart,
+  dayGlyphActive: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  // A day that has not happened yet is drawn but not claimed either way.
+  dayGlyphFuture: { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.07)' },
+  dayGlyphToday: { borderColor: withAlpha(AT_RISK, 0.7), borderWidth: 2 },
+  dayNum: { color: TEXT_FAINT, fontSize: 9, fontFamily: typography.regular },
+  dayNumToday: { color: TEXT_MUTED, fontFamily: typography.semiBold },
+
+  noteCard: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    padding: 18,
+    marginTop: SECTION_GAP,
   },
-  milestoneInfo: {
-    flex: 1,
-  },
-  milestoneText: {
-    ...typography.hudjee.body,
-    color: colors.hudjeeTextSecondary,
-  },
-  milestoneTextReached: {
-    color: colors.hudjeeTextPrimary,
-    fontFamily: typography.hudjee.headingMd.fontFamily,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 32,
-  }
+  noteTitle: { color: TEXT, fontSize: 14, fontFamily: typography.semiBold, marginBottom: 6 },
+  noteText: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.regular, lineHeight: 19 },
 });

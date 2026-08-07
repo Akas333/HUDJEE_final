@@ -18,6 +18,13 @@ import ProfileNavigator from './ProfileNavigator';
 
 const Tab = createBottomTabNavigator();
 
+// The active tab reads as the same glass surface the cards use, with a plain
+// white icon and label. The screens behind it change colour with the subject, so
+// a tinted tab bar would fight whatever wash is on screen.
+const ACTIVE_TINT = '#FFFFFF';
+const ACTIVE_SURFACE = 'rgba(255,255,255,0.10)';
+const ACTIVE_BORDER = 'rgba(255,255,255,0.14)';
+
 const HomeIcon = ({ color, size, strokeWidth }: { color: string; size: number; strokeWidth: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
     <Path d="M3 10L12 3l9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V10z" />
@@ -42,10 +49,10 @@ const TabIcon = ({ focused, icon: IconComp, label }: { focused: boolean, icon: a
         focused && styles.tabIconContainerFocused
       ]}
     >
-      <IconComp 
-        color={focused ? "#A78BFA" : colors.hudjeeTextSecondary} 
-        size={focused ? 20 : 24} 
-        strokeWidth={focused ? 2.5 : 2} 
+      <IconComp
+        color={focused ? ACTIVE_TINT : colors.hudjeeTextSecondary}
+        size={focused ? 20 : 24}
+        strokeWidth={focused ? 2.5 : 2}
       />
       {focused && (
         <Animated.Text 
@@ -137,7 +144,7 @@ export default function BottomTabNavigator() {
         name="Challenges" 
         component={SocialNavigator}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={Swords} label="Social" />
+          tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={Swords} label="Challenges" />
         }}
       />
       <Tab.Screen 
@@ -180,7 +187,9 @@ const styles = StyleSheet.create({
   },
   tabIconContainerFocused: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(167, 139, 250, 0.15)',
+    backgroundColor: ACTIVE_SURFACE,
+    borderWidth: 1,
+    borderColor: ACTIVE_BORDER,
     paddingHorizontal: 20,
     borderRadius: 24,
     gap: 8,
@@ -189,6 +198,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.hudjee.headingMd.fontFamily,
     fontSize: 14,
     fontWeight: '600',
-    color: '#A78BFA',
+    color: ACTIVE_TINT,
   }
 });

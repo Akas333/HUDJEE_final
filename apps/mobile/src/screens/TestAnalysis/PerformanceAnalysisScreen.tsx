@@ -1,39 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors } from '../../theme/colors';
 
-export default function PerformanceAnalysisScreen({ navigation }: any) {
+import PlaceholderScreen from '../../components/ui/PlaceholderScreen';
+import { TEST_TINT } from '../../theme/ui';
+
+export default function PerformanceAnalysisScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>PerformanceAnalysisScreen</Text>
-      <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-        <Text style={styles.buttonText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
+    <PlaceholderScreen
+      eyebrow="After the paper"
+      title="Performance"
+      blurb="Accuracy, speed, and the trade you made between them."
+      tint={TEST_TINT}
+      planned={[
+        "Accuracy against time spent, per question",
+        "Subject-wise strengths and soft spots",
+        "How this paper compares with your last few",
+      ]}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  }
-});

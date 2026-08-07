@@ -1,39 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors } from '../../theme/colors';
 
-export default function PracticeInterfaceScreen({ navigation }: any) {
+import PlaceholderScreen from '../../components/ui/PlaceholderScreen';
+import { DEFAULT_TINT } from '../../theme/subjects';
+
+export default function PracticeInterfaceScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>PracticeInterfaceScreen</Text>
-      <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-        <Text style={styles.buttonText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
+    <PlaceholderScreen
+      eyebrow="Practice"
+      title="Question set"
+      blurb="Working through a fixed set, rather than an adaptive one."
+      tint={DEFAULT_TINT}
+      planned={[
+        "Question, options and a place to work",
+        "Mark for review, and skip",
+        "Solution and explanation after each answer",
+      ]}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  }
-});

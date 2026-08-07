@@ -1,39 +1,20 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors } from '../../theme/colors';
 
-export default function PracticeMistakeQuestionsScreen({ navigation }: any) {
+import PlaceholderScreen from '../../components/ui/PlaceholderScreen';
+import { TEST_TINT } from '../../theme/ui';
+
+export default function PracticeMistakeQuestionsScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>PracticeMistakeQuestionsScreen</Text>
-      <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-        <Text style={styles.buttonText}>Go Back</Text>
-      </TouchableOpacity>
-    </View>
+    <PlaceholderScreen
+      eyebrow="After the paper"
+      title="Fix the mistakes"
+      blurb="Re-attempt only the questions you got wrong."
+      tint={TEST_TINT}
+      planned={[
+        "Every miss from this paper, back to back",
+        "The same question, then a variant of it",
+        "Anything still wrong goes to the mistake notebook",
+      ]}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-  }
-});

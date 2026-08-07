@@ -1,131 +1,81 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { SettingsToggle } from '../../components/settings/SettingsToggle';
+import { Accessibility, Vibrate, Volume2 } from 'lucide-react-native';
+
+import Screen from '../../components/ui/Screen';
+import ScreenHeader from '../../components/ui/ScreenHeader';
+import SettingsChoice from '../../components/settings/SettingsChoice';
+import SettingsGroup from '../../components/settings/SettingsGroup';
+import SettingsToggle from '../../components/settings/SettingsToggle';
 import { useSettingsStore } from '../../store/settingsStore';
-import { colors } from '../../theme/colors';
-import { typography } from '../../theme/typography';
-import { ArrowLeft } from 'lucide-react-native';
+import { GRADIENT, POSITIVE, PROFILE_TINT } from '../../theme/ui';
+
+const SESSION_LENGTHS = [10, 20, 30] as const;
 
 export function PracticePreferencesScreen() {
   const navigation = useNavigation<any>();
-  const { practicePrefs, togglePracticePref, updatePracticePref } = useSettingsStore();
+  const { practicePrefs, updatePracticePref } = useSettingsStore();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Practice Preferences</Text>
-      </View>
-      <ScrollView style={styles.content}>
-        <View style={styles.section}>
-          <SettingsToggle
-            title="Sound effects"
-            value={practicePrefs.sound}
-            onValueChange={() => togglePracticePref('sound')}
-          />
-          <SettingsToggle
-            title="Haptics"
-            value={practicePrefs.haptics}
-            onValueChange={() => togglePracticePref('haptics')}
-          />
-          <SettingsToggle
-            title="Reduce motion"
-            value={practicePrefs.reduceMotion}
-            onValueChange={() => togglePracticePref('reduceMotion')}
-          />
-          
-          <View style={styles.customRow}>
-            <Text style={styles.customRowLabel}>Default session length (mins)</Text>
-            <View style={styles.sessionOptions}>
-              {[10, 20, 30].map(length => (
-                <TouchableOpacity 
-                  key={length}
-                  style={[
-                    styles.sessionOption,
-                    practicePrefs.defaultSessionLength === length && styles.sessionOptionSelected
-                  ]}
-                  onPress={() => updatePracticePref('defaultSessionLength', length)}
-                >
-                  <Text style={[
-                    styles.sessionOptionText,
-                    practicePrefs.defaultSessionLength === length && styles.sessionOptionTextSelected
-                  ]}>
-                    {length}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+    <Screen tint={PROFILE_TINT}>
+      <ScreenHeader
+        eyebrow="Settings"
+        title="Practice"
+        subtitle="How a session feels, and how long one runs by default."
+        onBack={() => navigation.goBack()}
+      />
+
+      <SettingsGroup label="Feedback" index={0}>
+        <SettingsToggle
+          icon={Volume2}
+          accent={GRADIENT[1]}
+          title="Sound effects"
+          subtitle="The tick on a correct answer, and the one that is not"
+          value={practicePrefs.sound}
+          onValueChange={(v) => updatePracticePref('sound', v)}
+        />
+        <SettingsToggle
+          icon={Vibrate}
+          accent={GRADIENT[0]}
+          title="Haptics"
+          subtitle="A tap under every control you press"
+          value={practicePrefs.haptics}
+          onValueChange={(v) => updatePracticePref('haptics', v)}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup
+        label="Motion"
+        index={1}
+        footnote="Reduced motion keeps every screen and control exactly where it is — nothing slides, scales or springs."
+      >
+        <SettingsToggle
+          icon={Accessibility}
+          accent={POSITIVE}
+          title="Reduce motion"
+          subtitle="Cut the entrance animations and card springs"
+          value={practicePrefs.reduceMotion}
+          onValueChange={(v) => updatePracticePref('reduceMotion', v)}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup
+        label="Sessions"
+        index={2}
+        footnote="Arena and Challenges set their own length — this is the default for adaptive practice only."
+      >
+        <SettingsChoice
+          title="Default session length"
+          subtitle="Where the adaptive session starts before you change it"
+          options={SESSION_LENGTHS}
+          value={practicePrefs.defaultSessionLength as (typeof SESSION_LENGTHS)[number]}
+          onChange={(next) => updatePracticePref('defaultSessionLength', next)}
+          format={(minutes) => `${minutes} min`}
+          accent={GRADIENT[0]}
+        />
+      </SettingsGroup>
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  headerTitle: {
-    ...typography.hudjee.headingLg,
-    color: colors.text,
-  },
-  content: {
-    flex: 1,
-    paddingVertical: 16,
-  },
-  section: {
-    paddingHorizontal: 16,
-    gap: 16,
-  },
-  customRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-  },
-  customRowLabel: {
-    ...typography.hudjee.body,
-    color: colors.text,
-  },
-  sessionOptions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sessionOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  sessionOptionSelected: {
-    borderColor: '#38BDF8',
-    backgroundColor: '#38BDF820',
-  },
-  sessionOptionText: {
-    ...typography.hudjee.label,
-    color: '#9CA3AF',
-  },
-  sessionOptionTextSelected: {
-    color: '#38BDF8',
-    fontWeight: 'bold',
-  },
-});
+export default PracticePreferencesScreen;

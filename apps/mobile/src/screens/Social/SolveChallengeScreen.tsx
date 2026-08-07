@@ -1,346 +1,467 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated as RNAnimated,
+  Easing as RNEasing,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, Clock } from 'lucide-react-native';
+import Animated, { FadeIn, FadeInRight } from 'react-native-reanimated';
+import { ArrowRight, Lock, X } from 'lucide-react-native';
 
+import MathText from '../../components/MathText';
+import PressableScale from '../../components/PressableScale';
+import SubjectBackdrop from '../../components/SubjectBackdrop';
+import Avatar from '../../components/challenges/Avatar';
+import TierBadge from '../../components/challenges/TierBadge';
+import { HapticService } from '../../services/HapticService';
+import { useToastStore } from '../../services/ToastService';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import { SUBJECT_COLORS } from '../../theme/subjects';
+import {
+  AT_RISK,
+  CHALLENGE_TINT,
+  GUTTER,
+  RADIUS,
+  SURFACE,
+  SURFACE_BORDER,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  TRACK,
+  formatClock,
+} from '../../theme/challenges';
 import { useChallengesStore } from '../../store/challengesStore';
-import { MockEngineApi } from '../../services/api.mock';
-import type { ChallengeV2, ChallengeAnswer, Question } from '../../services/api.mock';
+import {
+  ChallengeAnswer,
+  ChallengeQuestion,
+  beginAttempt,
+  displayName,
+  fetchChallengeQuestions,
+} from '../../services/challengesApi';
 
-import AnimatedButton from '../../components/AnimatedButton';
-import MathText from '../../components/MathText';
-import Skeleton from '../../components/Skeleton';
-import ProgressBar from '../../components/ProgressBar';
+// The attempt. Practice's answer flow with three things taken away and one added:
+// no skip (skipping would break the comparison), no correctness reveal between
+// questions (knowing you got #2 wrong changes how you spend #3, and the two
+// participants would not be spending it under the same information), no review
+// pass after the last submit. What is added is the per-question clock.
 
-type SolveChallengeRouteProp = RouteProp<{ params: { challengeId: string } }, 'params'>;
+const RN_FAST_OUT_SLOW_IN = RNEasing.bezier(0.4, 0, 0.2, 1);
+const OPTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-export default function SolveChallengeScreen() {
-  const navigation = useNavigation<any>();
-  const route = useRoute<SolveChallengeRouteProp>();
-  const { challengeId } = route.params;
+/** The draining per-question clock. Runs out → the answer is locked as wrong. */
+function TimerBar({ questionKey, seconds, onExpire }: { questionKey: string; seconds: number; onExpire: () => void }) {
+  const anim = useRef(new RNAnimated.Value(1)).current;
+  const [left, setLeft] = useState(seconds);
+  const firedRef = useRef(false);
 
-  const submitChallengeAnswers = useChallengesStore((s) => s.submitChallengeAnswers);
-
-  const [challenge, setChallenge] = useState<ChallengeV2 | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<ChallengeAnswer[]>([]);
-  
-  const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [questionStartTime, setQuestionStartTime] = useState<number>(Date.now());
-  
-  const [totalElapsedSeconds, setTotalElapsedSeconds] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
-  
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Prevent swipe back
-  useEffect(() => {
-    navigation.setOptions({ gestureEnabled: false });
-  }, [navigation]);
+  // The interval is set up once per question, so it would otherwise fire the
+  // `onExpire` from that first render — losing an option the student picked but
+  // never submitted. The ref keeps the callback current without restarting the
+  // clock every time the selection changes.
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
 
   useEffect(() => {
-    loadChallenge();
-  }, [challengeId]);
+    firedRef.current = false;
+    setLeft(seconds);
+    anim.setValue(1);
 
-  useEffect(() => {
-    // Start global timer
-    timerRef.current = setInterval(() => {
-      setTotalElapsedSeconds(prev => prev + 1);
+    // Width is not a transform, so the bar cannot use the native driver.
+    RNAnimated.timing(anim, {
+      toValue: 0,
+      duration: seconds * 1000,
+      easing: RNEasing.linear,
+      useNativeDriver: false,
+    }).start();
+
+    const tick = setInterval(() => {
+      setLeft((prev) => {
+        const next = prev - 1;
+        if (next <= 0 && !firedRef.current) {
+          firedRef.current = true;
+          onExpireRef.current();
+        }
+        return Math.max(0, next);
+      });
     }, 1000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
 
-  const loadChallenge = async () => {
-    try {
-      const data = await MockEngineApi.getChallengeDetail(challengeId);
-      if (data) {
-        setChallenge(data);
-      } else {
-        Alert.alert('Error', 'Challenge not found');
-        navigation.goBack();
-      }
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Failed to load challenge');
-      navigation.goBack();
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => clearInterval(tick);
+  }, [questionKey, seconds]);
 
-  const handleBackPress = useCallback(() => {
-    Alert.alert(
-      'Quit Challenge?',
-      'If you leave now, your progress will be lost.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Quit', style: 'destructive', onPress: () => navigation.goBack() }
-      ]
-    );
-  }, [navigation]);
-
-  const handleNext = async () => {
-    if (!challenge || selectedOption === null) return;
-
-    const currentQuestion = challenge.questions[currentIndex];
-    const timeTakenMs = Date.now() - questionStartTime;
-    
-    // For mock purposes, index 0 is always correct if not specified, 
-    // but a real app would use the actual correct index.
-    const isCorrect = selectedOption === 0;
-
-    const answer: ChallengeAnswer = {
-      question_id: currentQuestion.question_id,
-      selected_answer: selectedOption,
-      is_correct: isCorrect,
-      time_taken_ms: timeTakenMs,
-    };
-
-    const newAnswers = [...answers, answer];
-    
-    if (currentIndex < challenge.questions.length - 1) {
-      setAnswers(newAnswers);
-      setSelectedOption(null);
-      setCurrentIndex(prev => prev + 1);
-      setQuestionStartTime(Date.now());
-    } else {
-      // Finish
-      setSubmitting(true);
-      try {
-        const result = await submitChallengeAnswers(challengeId, newAnswers);
-        navigation.replace('ChallengeResult', { challengeId, result });
-      } catch (err) {
-        console.error(err);
-        Alert.alert('Error', 'Failed to submit answers');
-        setSubmitting(false);
-      }
-    }
-  };
-
-  const formatTime = (totalSeconds: number) => {
-    const m = Math.floor(totalSeconds / 60);
-    const s = totalSeconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <ChevronLeft color={colors.hudjeeTextPrimary} size={28} />
-          </TouchableOpacity>
-        </View>
-        <View style={{ flex: 1, padding: 20, gap: 16 }}>
-          <Skeleton width="100%" height={100} borderRadius={16} />
-          <Skeleton width="100%" height={60} borderRadius={12} />
-          <Skeleton width="100%" height={60} borderRadius={12} />
-          <Skeleton width="100%" height={60} borderRadius={12} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!challenge || !challenge.questions || challenge.questions.length === 0) {
-    return (
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-         <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <ChevronLeft color={colors.hudjeeTextPrimary} size={28} />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No questions found.</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const currentQuestion = challenge.questions[currentIndex];
-  const progress = (currentIndex) / challenge.questions.length;
-  const isLastQuestion = currentIndex === challenge.questions.length - 1;
+  const width = anim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+  const urgent = left <= 10;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* Thin Progress Bar */}
-      <View style={styles.progressBarContainer}>
-        <ProgressBar progress={progress} />
+    <View style={styles.timerWrap}>
+      <View style={styles.timerTrack}>
+        <RNAnimated.View
+          style={[styles.timerFill, { width, backgroundColor: urgent ? AT_RISK : '#69EAC0' }]}
+        />
       </View>
+      <Text style={[styles.timerText, urgent && { color: AT_RISK }]}>{formatClock(left)}</Text>
+    </View>
+  );
+}
 
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={handleBackPress}>
-          <ChevronLeft color={colors.hudjeeTextPrimary} size={28} />
-        </TouchableOpacity>
-        
-        <Text style={styles.headerTitle}>
-          Question {currentIndex + 1} of {challenge.questions.length}
+export default function SolveChallengeScreen({ navigation, route }: any) {
+  const matchId: string = route.params?.matchId;
+
+  const matchById = useChallengesStore((s) => s.matchById);
+  const submitAttempt = useChallengesStore((s) => s.submitAttempt);
+  const match = matchById(matchId);
+
+  const [questions, setQuestions] = useState<ChallengeQuestion[] | null>(null);
+  const [index, setIndex] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [answers, setAnswers] = useState<ChallengeAnswer[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const askedAtRef = useRef(Date.now());
+
+  useEffect(() => {
+    if (!match) return;
+    let alive = true;
+
+    beginAttempt(matchId).catch(() => {});
+    fetchChallengeQuestions(match.questionIds)
+      .then((list) => {
+        if (!alive) return;
+        setQuestions(list);
+        askedAtRef.current = Date.now();
+      })
+      .catch((e) => alive && setFailed(e?.message || 'Could not load this set'));
+
+    return () => {
+      alive = false;
+    };
+  }, [matchId, match?.questionIds.length]);
+
+  const question = questions?.[index] ?? null;
+  const total = questions?.length ?? 0;
+  const opponent = displayName(match?.opponent?.username);
+
+  const finish = useCallback(
+    async (finalAnswers: ChallengeAnswer[]) => {
+      setSubmitting(true);
+      try {
+        await submitAttempt(matchId, finalAnswers);
+        // The results screen decides for itself whether both halves are in; if
+        // they are not it holds, which is exactly the "waiting on them" state.
+        navigation.replace('ChallengeResult', { matchId, justFinished: true });
+      } catch (e: any) {
+        useToastStore.getState().showToast(e?.message || 'Could not submit your set', 'error');
+        setSubmitting(false);
+      }
+    },
+    [matchId, navigation, submitAttempt]
+  );
+
+  const commit = useCallback(
+    (choice: number | null) => {
+      if (!question || submitting) return;
+
+      const answer: ChallengeAnswer = {
+        question_id: question.id,
+        // An unanswered timeout is a wrong answer, not a skip — the set has to
+        // stay the same length for both participants.
+        correct: choice != null && choice === question.correctIndex,
+        time_ms: Math.max(0, Date.now() - askedAtRef.current),
+      };
+
+      const next = [...answers, answer];
+      setAnswers(next);
+      setSelected(null);
+      HapticService.light();
+
+      if (index + 1 >= total) {
+        finish(next);
+        return;
+      }
+
+      setIndex(index + 1);
+      askedAtRef.current = Date.now();
+    },
+    [answers, finish, index, question, submitting, total]
+  );
+
+  const onExpire = useCallback(() => {
+    if (submitting) return;
+    HapticService.warning();
+    useToastStore.getState().showToast("Time's up on that one");
+    commit(selected);
+  }, [commit, selected, submitting]);
+
+  const leave = () => {
+    useToastStore
+      .getState()
+      .showToast('Left mid-set — finish before the window closes or it counts as a no-show.');
+    navigation.goBack();
+  };
+
+  const tint = useMemo(
+    () => (match?.subject ? SUBJECT_COLORS[match.subject] : CHALLENGE_TINT),
+    [match?.subject]
+  );
+
+  const shell = (children: React.ReactNode) => (
+    <View style={styles.root}>
+      <SubjectBackdrop color={tint} />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {children}
+      </SafeAreaView>
+    </View>
+  );
+
+  if (!match) {
+    return shell(
+      <View style={styles.centered}>
+        <ActivityIndicator color={TEXT_MUTED} />
+      </View>
+    );
+  }
+
+  if (failed || (questions && questions.length === 0)) {
+    return shell(
+      <View style={styles.centered}>
+        <Text style={styles.stateTitle}>This set can't be opened</Text>
+        <Text style={styles.stateText}>
+          {failed || 'None of its questions are published any more.'}
         </Text>
+        <PressableScale onPress={() => navigation.goBack()} scaleTo={0.96} style={styles.stateButton}>
+          <Text style={styles.stateButtonText}>Back to challenge</Text>
+        </PressableScale>
+      </View>
+    );
+  }
 
-        <View style={styles.timerContainer}>
-          <Clock color={colors.hudjeeTextSecondary} size={16} />
-          <Text style={styles.timerText}>{formatTime(totalElapsedSeconds)}</Text>
+  if (!questions || submitting) {
+    return shell(
+      <View style={styles.centered}>
+        <ActivityIndicator color={TEXT_MUTED} />
+        <Text style={styles.stateText}>{submitting ? 'Locking in your answers…' : 'Loading the set…'}</Text>
+      </View>
+    );
+  }
+
+  return shell(
+    <>
+      {/* The context banner stays put for the whole attempt: who, and where you
+          are in their set. */}
+      <View style={styles.banner}>
+        <PressableScale scaleTo={0.9} style={styles.closeButton} onPress={leave} accessibilityLabel="Leave attempt">
+          <X color={TEXT_MUTED} size={18} strokeWidth={2.2} />
+        </PressableScale>
+
+        <View style={styles.bannerCenter}>
+          <View style={styles.bannerTop}>
+            <Avatar username={match.opponent?.username} size={22} />
+            <Text style={styles.bannerText} numberOfLines={1}>
+              vs {opponent}
+            </Text>
+          </View>
+          <Text style={styles.bannerProgress}>
+            Question {index + 1} of {total}
+          </Text>
         </View>
+
+        <TierBadge tier={match.tier} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.qCard}>
-          <MathText style={styles.qPrompt}>{currentQuestion.prompt}</MathText>
-        </View>
+      <TimerBar
+        questionKey={question?.id || `q${index}`}
+        seconds={match.timerSeconds}
+        onExpire={onExpire}
+      />
 
-        <View style={styles.optionsContainer}>
-          {currentQuestion.options?.map((opt, idx) => {
-            const isSelected = selectedOption === idx;
-            const bgColor = isSelected ? `${colors.hudjeeProgressStart}15` : colors.hudjeeSurfaceCard;
-            const borderColor = isSelected ? colors.hudjeeProgressStart : colors.hudjeeBorderSubtle;
+      {/* The pip strip: answered, current, still to come. No correctness in it —
+          that is the whole point of holding the reveal to the end. */}
+      <View style={styles.pips}>
+        {questions.map((q, i) => (
+          <View
+            key={q.id}
+            style={[
+              styles.pip,
+              i < index && styles.pipDone,
+              i === index && styles.pipCurrent,
+            ]}
+          />
+        ))}
+      </View>
 
-            return (
-              <TouchableOpacity
-                key={idx}
-                activeOpacity={0.7}
-                style={[
-                  styles.optionBtn,
-                  { backgroundColor: bgColor, borderColor, borderWidth: 1 }
-                ]}
-                onPress={() => setSelectedOption(idx)}
-                disabled={submitting}
-              >
-                <View style={[styles.optLetterBox, isSelected && { backgroundColor: `${colors.hudjeeProgressStart}30` }]}>
-                  <Text style={[styles.optLetter, isSelected && { color: colors.hudjeeProgressStart }]}>
-                    {String.fromCharCode(65 + idx)}
-                  </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <MathText style={styles.optText}>{opt}</MathText>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {question ? (
+          <Animated.View key={question.id} entering={FadeInRight.duration(220)}>
+            <View style={styles.questionCard}>
+              <MathText style={styles.prompt}>{question.prompt}</MathText>
+            </View>
+
+            <View style={styles.options}>
+              {question.options.map((option, i) => {
+                const active = selected === i;
+                return (
+                  <PressableScale
+                    key={`${question.id}-${i}`}
+                    scaleTo={0.98}
+                    onPress={() => setSelected(i)}
+                    style={[styles.option, active && styles.optionActive]}
+                    accessibilityLabel={`Option ${OPTION_LABELS[i]}`}
+                  >
+                    <View style={[styles.optionBadge, active && styles.optionBadgeActive]}>
+                      <Text style={[styles.optionBadgeText, active && styles.optionBadgeTextActive]}>
+                        {OPTION_LABELS[i] || i + 1}
+                      </Text>
+                    </View>
+                    <MathText style={[styles.optionText, active && styles.optionTextActive]}>
+                      {option}
+                    </MathText>
+                  </PressableScale>
+                );
+              })}
+            </View>
+          </Animated.View>
+        ) : null}
       </ScrollView>
 
-      {/* Footer CTA */}
       <View style={styles.footer}>
-        <AnimatedButton 
-          hapticType="medium"
-          style={[styles.submitBtn, (selectedOption === null || submitting) && styles.submitBtnDisabled]}
-          disabled={selectedOption === null || submitting}
-          onPress={handleNext}
+        <View style={styles.footerNote}>
+          <Lock color={TEXT_FAINT} size={12} strokeWidth={2} />
+          <Text style={styles.footerNoteText}>
+            {index + 1 === total ? 'Submitting locks the whole set' : 'No going back once you lock it'}
+          </Text>
+        </View>
+
+        <PressableScale
+          onPress={() => commit(selected)}
+          disabled={selected == null}
+          scaleTo={0.97}
+          style={[styles.submitButton, selected == null && styles.submitButtonDisabled]}
+          accessibilityLabel={index + 1 === total ? 'Submit set' : 'Lock answer and continue'}
         >
-          {submitting ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.submitBtnText}>{isLastQuestion ? 'Finish' : 'Next'}</Text>
-          )}
-        </AnimatedButton>
+          <Animated.Text entering={FadeIn.duration(150)} style={styles.submitText}>
+            {index + 1 === total ? 'Submit set' : 'Lock it in'}
+          </Animated.Text>
+          <ArrowRight color="#0B0B0C" size={16} strokeWidth={2.4} />
+        </PressableScale>
       </View>
-    </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { 
-    flex: 1, 
-    backgroundColor: colors.hudjeeBgBase 
+  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  safeArea: { flex: 1 },
+  container: { flex: 1 },
+  content: { paddingHorizontal: GUTTER, paddingTop: 20, paddingBottom: 24 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: GUTTER, gap: 10 },
+
+  stateTitle: { color: TEXT, fontSize: 19, fontFamily: typography.bold, textAlign: 'center' },
+  stateText: { color: TEXT_MUTED, fontSize: 14, fontFamily: typography.regular, textAlign: 'center', lineHeight: 20 },
+  stateButton: {
+    marginTop: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    borderRadius: 999,
+    backgroundColor: '#F5F5F7',
   },
-  progressBarContainer: {
-    width: '100%',
-  },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16, 
-    paddingVertical: 12 
-  },
-  backBtn: { 
-    padding: 4, 
-    marginLeft: -4 
-  },
-  headerTitle: { 
-    color: colors.hudjeeTextPrimary, 
-    ...typography.hudjee.headingMd
-  },
-  timerContainer: {
+  stateButtonText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
+
+  banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6
+    gap: 12,
+    paddingHorizontal: GUTTER - 8,
+    paddingVertical: 10,
   },
-  timerText: {
-    color: colors.hudjeeTextSecondary,
-    ...typography.hudjee.numericEmphasis
-  },
-  scrollContent: { 
-    padding: 20, 
-    paddingBottom: 40 
-  },
-  qCard: { 
-    marginBottom: 32 
-  },
-  qPrompt: { 
-    color: colors.hudjeeTextPrimary, 
-    ...typography.hudjee.headingMd,
-    lineHeight: 28,
-  },
-  optionsContainer: { 
-    gap: 12 
-  },
-  optionBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 16, 
-    borderRadius: 16 
-  },
-  optLetterBox: { 
-    width: 32, 
-    height: 32, 
-    borderRadius: 8, 
-    backgroundColor: colors.hudjeeSurfaceCardElevated, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginRight: 16 
-  },
-  optLetter: { 
-    color: colors.hudjeeTextSecondary, 
-    ...typography.hudjee.label,
-    fontFamily: typography.bold
-  },
-  optText: { 
-    color: colors.hudjeeTextPrimary, 
-    ...typography.hudjee.body
-  },
-  footer: { 
-    padding: 20, 
-    borderTopWidth: 1, 
-    borderTopColor: colors.hudjeeBorderSubtle, 
-    backgroundColor: colors.hudjeeBgBase 
-  },
-  submitBtn: { 
-    backgroundColor: colors.hudjeeProgressStart, 
-    paddingVertical: 16, 
-    borderRadius: 16, 
-    alignItems: 'center' 
-  },
-  submitBtnDisabled: { 
-    opacity: 0.5 
-  },
-  submitBtnText: { 
-    color: '#000', 
-    ...typography.hudjee.headingMd,
-    fontFamily: typography.extraBold
-  },
-  emptyContainer: {
-    flex: 1,
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.09)',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
   },
-  emptyText: {
-    color: colors.hudjeeTextSecondary,
-    ...typography.hudjee.body
-  }
+  bannerCenter: { flex: 1 },
+  bannerTop: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  bannerText: { color: TEXT, fontSize: 14, fontFamily: typography.semiBold, letterSpacing: -0.2, flexShrink: 1 },
+  bannerProgress: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular, marginTop: 3, marginLeft: 29 },
+
+  timerWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: GUTTER, marginTop: 4 },
+  timerTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: TRACK, overflow: 'hidden' },
+  timerFill: { height: '100%', borderRadius: 2 },
+  timerText: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.bold, width: 44, textAlign: 'right' },
+
+  pips: { flexDirection: 'row', gap: 5, paddingHorizontal: GUTTER, marginTop: 14 },
+  pip: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.10)' },
+  pipDone: { backgroundColor: 'rgba(255,255,255,0.45)' },
+  pipCurrent: { backgroundColor: '#FFFFFF' },
+
+  questionCard: {
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    padding: 20,
+  },
+  prompt: { color: TEXT, fontSize: 17, lineHeight: 26, fontFamily: typography.regular },
+
+  options: { gap: 10, marginTop: 16 },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: SURFACE,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  optionActive: { borderColor: 'rgba(255,255,255,0.45)', backgroundColor: 'rgba(255,255,255,0.08)' },
+  optionBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionBadgeActive: { backgroundColor: '#FFFFFF' },
+  optionBadgeText: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.bold },
+  optionBadgeTextActive: { color: '#0B0B0C' },
+  optionText: { flex: 1, color: TEXT_MUTED, fontSize: 15, lineHeight: 22, fontFamily: typography.regular },
+  optionTextActive: { color: TEXT },
+
+  footer: {
+    paddingHorizontal: GUTTER,
+    paddingTop: 12,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: SURFACE_BORDER,
+    backgroundColor: 'rgba(11,11,12,0.86)',
+  },
+  footerNote: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  footerNoteText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
+  submitButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 999,
+    backgroundColor: '#F5F5F7',
+  },
+  submitButtonDisabled: { opacity: 0.4 },
+  submitText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
 });

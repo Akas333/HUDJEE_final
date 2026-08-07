@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { EngineApi } from './api';
+import { fetchChallengeActivityDays } from './challengesApi';
 
 // Everything the Home tab shows is derived from `answer_events` + the taxonomy
 // tables, so the screen stays live even when the FastAPI engine is not running
@@ -9,6 +10,14 @@ const LOOKBACK_DAYS = 90;
 const MAX_EVENTS = 3000;
 const SCORE_WINDOW_DAYS = 30;
 const CONTINUE_LIMIT = 3;
+
+/**
+ * The daily goal the week strip marks against. Questions decide whether a day
+ * counts as done; the minute target is a second counter shown alongside it.
+ * Both are fixed for now — there is no per-user goal anywhere in the schema.
+ */
+export const DAILY_GOAL_QUESTIONS = 20;
+export const DAILY_GOAL_MINUTES = 30;
 
 /** Attempts on a topic before it counts as "covered" for syllabus completion. */
 const TOPIC_COVERED_AT = 3;
@@ -27,24 +36,64 @@ export interface ContinueChapter {
   lastPracticedAt: string | null;
 }
 
+/**
+ * Where a card sends you when it is tapped. Resolved to a navigation call by the
+ * Home screen — the service layer names the destination, it does not know the
+ * route graph.
+ */
+export type HomeAction =
+  | { kind: 'practice'; subject?: string | null }
+  | { kind: 'chapter'; chapterId: string; chapterName: string; subject: string | null }
+  | { kind: 'streak' }
+  | { kind: 'arena' }
+  | { kind: 'leaderboard' };
+
 export interface HomeInsight {
   id: string;
   title: string;
   text: string;
+  /** Every insight is tappable; this says where it goes. */
+  action: HomeAction;
+}
+
+/**
+ * `met` hit the goal, `partial` practised but fell short, `missed` did nothing,
+ * `today` is still in play, `future` has not happened yet.
+ */
+export type DayStatus = 'met' | 'partial' | 'missed' | 'today' | 'future';
+
+export interface DayProgress {
+  key: string;
+  /** 'Sun'…'Sat'. */
+  label: string;
+  /** Day of the month. */
+  dateNum: number;
+  questions: number;
+  minutes: number;
+  status: DayStatus;
+  /** Fraction of the question goal, 0–1. */
+  progress: number;
+  /** Separate from `status`, which flips to `met` the moment the goal is hit. */
+  isToday: boolean;
 }
 
 export interface HomeSnapshot {
+  /** First name where we have one. Never a generated `user_xxxx` handle. */
   displayName: string | null;
-  performanceScore: number;
-  performanceBand: string;
-  performanceDelta: number | null;
-  successIndex: number;
-  successCaption: string;
-  syllabusCompletion: number;
-  syllabusCaption: string;
+  readinessScore: number;
+  readinessBand: string;
+  readinessDelta: number | null;
+  consistencyScore: number;
+  consistencyCaption: string;
+  coverageScore: number;
+  coverageCaption: string;
   streakDays: number;
   questionsToday: number;
   minutesToday: number;
+  /** Recent accuracy, or null when there is nothing to average yet. */
+  accuracyPct: number | null;
+  /** The current week, Sunday first, for the daily-goal strip. */
+  week: DayProgress[];
   insights: HomeInsight[];
   continueChapters: ContinueChapter[];
   hasActivity: boolean;
@@ -105,6 +154,22 @@ function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/**
+ * Profiles created by the auth trigger get an auto-generated handle like
+ * `user_7421c8f0`. Greeting someone by a system ID reads as unfinished, so a
+ * generated handle is treated as "no name" and the greeting drops the name line.
+ */
+function presentableName(username: string | null | undefined, authUser?: any): string | null {
+  // A Google sign-in carries a real name; prefer the first name over any handle.
+  const meta = authUser?.user_metadata ?? {};
+  const given = meta.given_name || meta.name || meta.full_name;
+  if (typeof given === 'string' && given.trim()) return given.trim().split(/\s+/)[0];
+
+  if (!username) return null;
+  if (/^user[_-]?[0-9a-f]{6,}$/i.test(username.trim())) return null;
+  return username;
+}
+
 // ─── scoring ─────────────────────────────────────────────────────────────────
 
 interface WindowStats {
@@ -163,6 +228,45 @@ function bandFor(score: number): string {
   return 'No data yet';
 }
 
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * The calendar week containing `now`, Sunday first, with each day marked against
+ * the question goal. Future days are reported as such rather than as misses —
+ * a Wednesday cannot be failed on Monday.
+ */
+function buildWeek(events: EventRow[], now: Date): DayProgress[] {
+  const today = startOfDay(now);
+  const weekStart = addDays(today, -now.getDay());
+  const todayKey = dayKey(today);
+
+  return WEEKDAY_LABELS.map((label, i) => {
+    const date = addDays(weekStart, i);
+    const stats = statsForWindow(events, date, addDays(date, 1));
+    const key = dayKey(date);
+    const isToday = key === todayKey;
+    const isFuture = date.getTime() > today.getTime();
+
+    let status: DayStatus;
+    if (stats.answered >= DAILY_GOAL_QUESTIONS) status = 'met';
+    else if (isToday) status = 'today';
+    else if (isFuture) status = 'future';
+    else if (stats.answered > 0) status = 'partial';
+    else status = 'missed';
+
+    return {
+      key,
+      label,
+      dateNum: date.getDate(),
+      questions: stats.answered,
+      minutes: Math.round(stats.ms / 60000),
+      status,
+      progress: clamp(stats.answered / DAILY_GOAL_QUESTIONS, 0, 1),
+      isToday,
+    };
+  });
+}
+
 /** Consecutive practice days ending today (or yesterday, if today is still empty). */
 function computeStreak(dayKeys: Set<string>, now: Date): number {
   if (dayKeys.size === 0) return 0;
@@ -183,14 +287,22 @@ function computeStreak(dayKeys: Set<string>, now: Date): number {
 
 // ─── insights ────────────────────────────────────────────────────────────────
 
+/** The weakest topic, with enough of its parent chapter to navigate there. */
+interface WeakTopic {
+  name: string;
+  chapterId: string | null;
+  chapterName: string | null;
+  subject: string | null;
+}
+
 interface InsightInput {
   events: EventRow[];
   now: Date;
   streak: number;
-  weakestTopicName: string | null;
+  weakestTopic: WeakTopic | null;
 }
 
-function buildInsights({ events, now, streak, weakestTopicName }: InsightInput): HomeInsight[] {
+function buildInsights({ events, now, streak, weakestTopic }: InsightInput): HomeInsight[] {
   const today = startOfDay(now);
   const yesterday = addDays(today, -1);
   const week = statsForWindow(events, addDays(today, -7), addDays(today, 1));
@@ -207,6 +319,7 @@ function buildInsights({ events, now, streak, weakestTopicName }: InsightInput):
       id: 'time',
       title: 'Time Invested',
       text: "No practice yesterday — let's bounce back today",
+      action: { kind: 'practice' },
     });
   } else {
     let tail = ' — right on track with your average';
@@ -216,6 +329,7 @@ function buildInsights({ events, now, streak, weakestTopicName }: InsightInput):
       id: 'time',
       title: 'Time Invested',
       text: `${formatDuration(yday.ms)} yesterday${tail}`,
+      action: { kind: 'streak' },
     });
   }
 
@@ -224,6 +338,7 @@ function buildInsights({ events, now, streak, weakestTopicName }: InsightInput):
     id: 'streak',
     title: 'Streak',
     text: streak > 0 ? `${streak}-day streak — keep it going` : 'No streak yet — one session starts it',
+    action: { kind: 'streak' },
   });
 
   // 3. Strongest subject (last 7 days, then last 30 as a fallback)
@@ -246,23 +361,36 @@ function buildInsights({ events, now, streak, weakestTopicName }: InsightInput):
     const [name, s] = ranked[0];
     out.push({
       id: 'subject',
-      title: 'Strongest Subject',
+      title: 'Leading Subject',
       text: `${titleCase(name)} is leading at ${pct(s.correct, s.total)}% accuracy`,
+      // Opens the chapter list already switched to that subject.
+      action: { kind: 'practice', subject: name },
     });
   } else {
     out.push({
       id: 'subject',
-      title: 'Strongest Subject',
-      text: 'Practise a few more questions to reveal your strongest subject',
+      title: 'Leading Subject',
+      text: 'Practise a few more questions to reveal your leading subject',
+      action: { kind: 'practice' },
     });
   }
 
   // 4. Needs attention
-  if (weakestTopicName) {
+  if (weakestTopic) {
     out.push({
       id: 'attention',
       title: 'Needs Attention',
-      text: `${weakestTopicName} could use another pass`,
+      text: `${weakestTopic.name} could use another pass`,
+      // Lands on the chapter that holds the topic, so the fix is one tap away.
+      action:
+        weakestTopic.chapterId && weakestTopic.chapterName
+          ? {
+              kind: 'chapter',
+              chapterId: weakestTopic.chapterId,
+              chapterName: weakestTopic.chapterName,
+              subject: weakestTopic.subject,
+            }
+          : { kind: 'practice', subject: weakestTopic.subject },
     });
   }
 
@@ -272,7 +400,7 @@ function buildInsights({ events, now, streak, weakestTopicName }: InsightInput):
     let text = `Accuracy held steady at ${pct(week.correct, week.answered)}% this week`;
     if (delta > 0) text = `Accuracy up ${delta} points this week`;
     else if (delta < 0) text = `Accuracy down ${Math.abs(delta)} points this week`;
-    out.push({ id: 'trend', title: 'Accuracy Trend', text });
+    out.push({ id: 'trend', title: 'Accuracy Trend', text, action: { kind: 'practice' } });
   }
 
   // 6. Volume
@@ -283,6 +411,7 @@ function buildInsights({ events, now, streak, weakestTopicName }: InsightInput):
       text: `${week.answered} question${week.answered === 1 ? '' : 's'} across ${week.activeDays} day${
         week.activeDays === 1 ? '' : 's'
       }`,
+      action: { kind: 'streak' },
     });
   }
 
@@ -310,10 +439,20 @@ function mergeEngineInsights(local: HomeInsight[], engine: any): HomeInsight[] {
   });
 
   if (engine.arena_movement_insight) {
-    merged.push({ id: 'arena', title: 'Arena Movement', text: engine.arena_movement_insight });
+    merged.push({
+      id: 'arena',
+      title: 'Arena Movement',
+      text: engine.arena_movement_insight,
+      action: { kind: 'arena' },
+    });
   }
   if (engine.social_rank_insight) {
-    merged.push({ id: 'social', title: 'Social', text: engine.social_rank_insight });
+    merged.push({
+      id: 'social',
+      title: 'Social',
+      text: engine.social_rank_insight,
+      action: { kind: 'leaderboard' },
+    });
   }
 
   return merged;
@@ -321,7 +460,7 @@ function mergeEngineInsights(local: HomeInsight[], engine: any): HomeInsight[] {
 
 // ─── main fetch ──────────────────────────────────────────────────────────────
 
-export async function fetchHomeSnapshot(userId: string): Promise<HomeSnapshot> {
+export async function fetchHomeSnapshot(userId: string, authUser?: any): Promise<HomeSnapshot> {
   const now = new Date();
   const since = addDays(startOfDay(now), -LOOKBACK_DAYS).toISOString();
 
@@ -470,41 +609,73 @@ export async function fetchHomeSnapshot(userId: string): Promise<HomeSnapshot> {
   }
 
   // ── weakest topic, for the "Needs Attention" card ──
-  let weakestTopicName: string | null = null;
+  // The parent chapter comes along so the card can navigate there rather than
+  // naming a topic the student then has to go and find.
+  let weakestTopic: WeakTopic | null = null;
   const weakCandidates = [...conceptAgg.entries()]
     .filter(([, s]) => s.total >= 3 && s.correct / s.total < 0.6)
     .sort((a, b) => a[1].correct / a[1].total - b[1].correct / b[1].total);
   if (weakCandidates.length > 0) {
     const { data } = await supabase
       .from('topics')
-      .select('name')
+      .select('name, chapter_id, chapters(name, subject)')
       .eq('id', weakCandidates[0][0])
       .maybeSingle();
-    weakestTopicName = (data as any)?.name || null;
+    const row = data as any;
+    if (row?.name) {
+      // PostgREST returns the embedded to-one row as an object; older generated
+      // types widen it to an array, so handle both shapes.
+      const chapter = Array.isArray(row.chapters) ? row.chapters[0] : row.chapters;
+      weakestTopic = {
+        name: row.name,
+        chapterId: row.chapter_id ?? null,
+        chapterName: chapter?.name ?? null,
+        subject: chapter?.subject ?? null,
+      };
+    }
   }
 
   // ── headline numbers ──
   const today = startOfDay(now);
   const todayStats = statsForWindow(events, today, addDays(today, 1));
+  const weekStats = statsForWindow(events, addDays(today, -7), addDays(today, 1));
   const monthStats = statsForWindow(events, addDays(today, -30), addDays(today, 1));
+
+  // A handful of answers is too thin to call an accuracy, so a quiet week falls
+  // back to the month rather than reporting 0% or 100% off two questions.
+  const accuracySource = weekStats.answered >= 5 ? weekStats : monthStats;
+  const accuracyPct =
+    accuracySource.answered > 0 ? pct(accuracySource.correct, accuracySource.answered) : null;
+
+  // Finishing a challenge set counts as a day the student showed up, even though
+  // challenges deliberately write no `answer_event` — their shared fixed pool
+  // must not move mastery, coverage or readiness. So the streak, and only the
+  // streak, folds those days in; the goal strip above stays practice volume.
+  try {
+    for (const at of await fetchChallengeActivityDays(userId, since)) {
+      dayKeys.add(dayKey(new Date(at)));
+    }
+  } catch {
+    // Streak falls back to practice activity alone rather than taking Home down.
+  }
 
   const streakDays = computeStreak(dayKeys, now);
 
   const cpsRows = (cpsRes.data || []) as any[];
-  let performanceScore: number;
-  let performanceDelta: number | null = null;
+  let readinessScore: number;
+  let readinessDelta: number | null = null;
 
   if (cpsRows.length > 0) {
     // cps_scores is 0–1000; the card speaks in 0–100.
-    performanceScore = clamp(Math.round((cpsRows[0].score ?? 0) / 10), 0, 100);
+    readinessScore = clamp(Math.round((cpsRows[0].score ?? 0) / 10), 0, 100);
     const weekAgo = cpsRows.find(
       (r) => new Date(r.valid_for_date).getTime() <= addDays(today, -7).getTime()
     );
-    if (weekAgo) performanceDelta = performanceScore - clamp(Math.round((weekAgo.score ?? 0) / 10), 0, 100);
+    if (weekAgo) readinessDelta = readinessScore - clamp(Math.round((weekAgo.score ?? 0) / 10), 0, 100);
   } else {
-    performanceScore = computeScore(events, now, masteryAvg);
+    readinessScore = computeScore(events, now, masteryAvg);
     const lastWeekScore = computeScore(events, addDays(now, -7), masteryAvg);
-    if (monthStats.answered > 0) performanceDelta = performanceScore - lastWeekScore;
+    if (monthStats.answered > 0) readinessDelta = readinessScore - lastWeekScore;
   }
 
   const totalTopics = topicCountRes.count || 0;
@@ -518,28 +689,34 @@ export async function fetchHomeSnapshot(userId: string): Promise<HomeSnapshot> {
     engineSummary = null;
   }
   const insights = mergeEngineInsights(
-    buildInsights({ events, now, streak: streakDays, weakestTopicName }),
+    buildInsights({ events, now, streak: streakDays, weakestTopic }),
     // The mock fallback inside getDashboardSummary returns placeholder copy, so
     // only trust the engine when it really answered with computed values.
     engineSummary && engineSummary.__mock ? null : engineSummary
   );
 
   return {
-    displayName: (profileRes.data as any)?.username || null,
-    performanceScore,
-    performanceBand: bandFor(performanceScore),
-    performanceDelta,
-    successIndex: pct(monthStats.correct, monthStats.answered),
-    successCaption: monthStats.answered
-      ? `${monthStats.correct}/${monthStats.answered} correct · 30 days`
-      : 'No answers in the last 30 days',
-    syllabusCompletion: pct(coveredTopics, totalTopics),
-    syllabusCaption: totalTopics
-      ? `${coveredTopics} of ${totalTopics} topics covered`
-      : 'Syllabus not loaded yet',
+    displayName: presentableName((profileRes.data as any)?.username, authUser),
+    readinessScore,
+    readinessBand: bandFor(readinessScore),
+    readinessDelta,
+    // Consistency measures how regularly you show up, not how often you are
+    // right — accuracy already drives the readiness score and the trend insight.
+    consistencyScore: pct(monthStats.activeDays, SCORE_WINDOW_DAYS),
+    // Captions sit in a narrow half-width card — keep them short enough to fit
+    // two lines without clipping.
+    consistencyCaption: monthStats.activeDays
+      ? `${monthStats.activeDays} of last 30 days`
+      : 'No practice yet',
+    coverageScore: pct(coveredTopics, totalTopics),
+    coverageCaption: totalTopics
+      ? `${coveredTopics}/${totalTopics} topics covered`
+      : 'Syllabus empty',
     streakDays,
     questionsToday: todayStats.answered,
     minutesToday: Math.round(todayStats.ms / 60000),
+    accuracyPct,
+    week: buildWeek(events, now),
     insights,
     continueChapters,
     hasActivity: events.length > 0,

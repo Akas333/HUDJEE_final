@@ -1,153 +1,87 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity, Modal } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React from 'react';
+import { Linking } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { SettingsToggle } from '../../components/settings/SettingsToggle';
+import { ExternalLink, Flame, Pencil, Swords, TrendingUp } from 'lucide-react-native';
+
+import Screen from '../../components/ui/Screen';
+import ScreenHeader from '../../components/ui/ScreenHeader';
+import SettingsGroup from '../../components/settings/SettingsGroup';
+import SettingsRow from '../../components/settings/SettingsRow';
+import SettingsToggle from '../../components/settings/SettingsToggle';
 import { useSettingsStore } from '../../store/settingsStore';
-import { colors } from '../../theme/colors';
-import { typography } from '../../theme/typography';
-import { ArrowLeft } from 'lucide-react-native';
+import { CAUTION, GRADIENT, POSITIVE, PROFILE_TINT } from '../../theme/ui';
+import { CHALLENGE_TINT } from '../../theme/challenges';
+
+// The old version of this screen threw a "Stay on track" modal over itself on
+// every single open, with a "Turn on notifications" button that turned nothing
+// on. A pre-prompt you cannot get past and that does not do the thing it offers
+// is worse than no pre-prompt. What replaces it is the honest version: the four
+// switches, and one row that takes you to where the real permission lives.
 
 export function NotificationsScreen() {
   const navigation = useNavigation<any>();
-  const { notifications, toggleNotification } = useSettingsStore();
-  const [showPrePrompt, setShowPrePrompt] = useState(true); // Mock first launch state
+  const { notifications, updateNotification } = useSettingsStore();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-      </View>
-      <ScrollView style={styles.content}>
-        <View style={styles.section}>
-          <SettingsToggle
-            title="Streak reminders"
-            value={notifications.streak}
-            onValueChange={() => toggleNotification('streak')}
-          />
-          <SettingsToggle
-            title="Challenge activity"
-            value={notifications.challenge}
-            onValueChange={() => toggleNotification('challenge')}
-          />
-          <SettingsToggle
-            title="Daily practice reminder"
-            value={notifications.practice}
-            onValueChange={() => toggleNotification('practice')}
-          />
-          <SettingsToggle
-            title="Arena rating changes"
-            value={notifications.arena}
-            onValueChange={() => toggleNotification('arena')}
-          />
-        </View>
-      </ScrollView>
+    <Screen tint={PROFILE_TINT}>
+      <ScreenHeader
+        eyebrow="Settings"
+        title="Notifications"
+        subtitle="Four reasons we will interrupt you. Turn off the ones that are not worth it."
+        onBack={() => navigation.goBack()}
+      />
 
-      {showPrePrompt && (
-        <Modal transparent animationType="fade" visible={showPrePrompt}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Stay on track</Text>
-              <Text style={styles.modalBody}>
-                Enable notifications so we can remind you to keep your daily momentum going. We won't spam you.
-              </Text>
-              <TouchableOpacity 
-                style={styles.modalButtonPrimary}
-                onPress={() => setShowPrePrompt(false)}
-              >
-                <Text style={styles.modalButtonPrimaryText}>Turn on notifications</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.modalButtonSecondary}
-                onPress={() => setShowPrePrompt(false)}
-              >
-                <Text style={styles.modalButtonSecondaryText}>Maybe later</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
-    </SafeAreaView>
+      <SettingsGroup label="Keeping momentum" index={0}>
+        <SettingsToggle
+          icon={Flame}
+          accent={CAUTION}
+          title="Streak reminders"
+          subtitle="Only when the day is nearly out and the streak is live"
+          value={notifications.streak}
+          onValueChange={(v) => updateNotification('streak', v)}
+        />
+        <SettingsToggle
+          icon={Pencil}
+          accent={GRADIENT[1]}
+          title="Daily practice reminder"
+          subtitle="One nudge at your usual practice time"
+          value={notifications.practice}
+          onValueChange={(v) => updateNotification('practice', v)}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup label="Other people" index={1}>
+        <SettingsToggle
+          icon={Swords}
+          accent={CHALLENGE_TINT}
+          title="Challenge activity"
+          subtitle="Someone challenges you, or answers one of yours"
+          value={notifications.challenge}
+          onValueChange={(v) => updateNotification('challenge', v)}
+        />
+        <SettingsToggle
+          icon={TrendingUp}
+          accent={POSITIVE}
+          title="Arena rating changes"
+          subtitle="When a session moves your rating"
+          value={notifications.arena}
+          onValueChange={(v) => updateNotification('arena', v)}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup
+        label="System"
+        index={2}
+        footnote="These switches only choose which notifications we send. Whether the phone shows them at all is decided in system settings."
+      >
+        <SettingsRow
+          icon={ExternalLink}
+          title="Open system notification settings"
+          onPress={() => Linking.openSettings()}
+        />
+      </SettingsGroup>
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  headerTitle: {
-    ...typography.hudjee.headingLg,
-    color: colors.text,
-  },
-  content: {
-    flex: 1,
-    paddingVertical: 16,
-  },
-  section: {
-    paddingHorizontal: 16,
-    gap: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalTitle: {
-    ...typography.hudjee.headingLg,
-    color: colors.text,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  modalBody: {
-    ...typography.hudjee.body,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  modalButtonPrimary: {
-    backgroundColor: '#38BDF8',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  modalButtonPrimaryText: {
-    ...typography.hudjee.label,
-    color: colors.background,
-    fontWeight: 'bold',
-  },
-  modalButtonSecondary: {
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalButtonSecondaryText: {
-    ...typography.hudjee.label,
-    color: '#9CA3AF',
-  }
-});
+export default NotificationsScreen;

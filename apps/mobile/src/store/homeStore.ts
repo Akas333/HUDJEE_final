@@ -15,6 +15,13 @@ interface HomeState {
   load: () => Promise<void>;
   /** Always refetches; drives pull-to-refresh. */
   refresh: () => Promise<void>;
+  /**
+   * Drops the freshness stamp without clearing the snapshot, so the next `load`
+   * refetches while the current numbers stay on screen. Called before leaving
+   * Home for anything that can change them — a session, a chapter, the arena —
+   * since otherwise the staleness window hides the result of a short session.
+   */
+  invalidate: () => void;
 }
 
 async function run(
@@ -37,7 +44,7 @@ async function run(
       return;
     }
 
-    const snapshot = await fetchHomeSnapshot(userId);
+    const snapshot = await fetchHomeSnapshot(userId, session?.user);
     set({ snapshot, error: null, lastFetchedAt: Date.now(), loading: false, refreshing: false });
   } catch (e: any) {
     console.error('Failed to load home snapshot:', e);
@@ -61,4 +68,5 @@ export const useHomeStore = create<HomeState>((set, get) => ({
     await run(set, get, 'load');
   },
   refresh: () => run(set, get, 'refresh'),
+  invalidate: () => set({ lastFetchedAt: null }),
 }));

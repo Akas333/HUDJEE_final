@@ -1,182 +1,240 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Settings, BookOpen, ChevronRight, Trophy, Flame, Target } from 'lucide-react-native';
-import { colors } from '../../theme/colors';
-import { typography } from '../../theme/typography';
+import React, { useCallback } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import Animated from 'react-native-reanimated';
+import {
+  Bell,
+  BookOpen,
+  Flame,
+  Gauge,
+  Settings,
+  Swords,
+  Target,
+  Trophy,
+} from 'lucide-react-native';
+
+import PressableScale from '../../components/PressableScale';
+import Screen from '../../components/ui/Screen';
+import ScreenHeader from '../../components/ui/ScreenHeader';
+import SectionHeader from '../../components/ui/SectionHeader';
+import SettingsGroup from '../../components/settings/SettingsGroup';
+import SettingsRow from '../../components/settings/SettingsRow';
 import { StatTile } from '../../components/StatTile';
+import { useAuthStore } from '../../store/authStore';
+import { useHomeStore } from '../../store/homeStore';
+import { typography } from '../../theme/typography';
+import { CHALLENGE_TINT } from '../../theme/challenges';
+import {
+  CAUTION,
+  enter,
+  GAP,
+  GLASS,
+  GLASS_BORDER,
+  GRADIENT,
+  POSITIVE,
+  PROFILE_TINT,
+  RADIUS,
+  SURFACE,
+  SURFACE_BORDER,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+} from '../../theme/ui';
+
+// Profile used to invent its own student — "Aspirant_123", a twelve-day streak,
+// 68% accuracy, an arena rating of 1450 — none of which came from anywhere. It
+// reads from the same snapshot Home does now, so the two tabs cannot disagree
+// about the same student, and shows an em dash where a number does not exist yet
+// rather than a plausible-looking lie.
+
+const DASH = '—';
 
 export default function ProfileScreen({ navigation }: any) {
+  const account = useAuthStore((s) => s.user ?? s.session?.user ?? null);
+  const snapshot = useHomeStore((s) => s.snapshot);
+  const load = useHomeStore((s) => s.load);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
+
+  const email = account?.email ?? null;
+  const displayName =
+    snapshot?.displayName ?? (email ? email.split('@')[0] : null) ?? 'Student';
+  const initial = displayName.trim().charAt(0).toUpperCase() || 'H';
+
+  const streak = snapshot ? `${snapshot.streakDays}` : DASH;
+  const accuracy =
+    snapshot?.accuracyPct != null ? `${Math.round(snapshot.accuracyPct)}%` : DASH;
+  const readiness = snapshot ? `${Math.round(snapshot.readinessScore)}` : DASH;
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentPadding}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('SettingsStack')}>
-            <Settings color={colors.hudjeeTextPrimary} size={24} />
-          </TouchableOpacity>
-        </View>
+    <Screen tint={PROFILE_TINT}>
+      <ScreenHeader
+        title="Profile"
+        subtitle={
+          snapshot?.hasActivity === false
+            ? 'Your numbers fill in once you have practised.'
+            : undefined
+        }
+        action={
+          <PressableScale
+            scaleTo={0.9}
+            style={styles.iconButton}
+            onPress={() => navigation.navigate('SettingsStack')}
+            accessibilityLabel="Settings"
+          >
+            <Settings color={TEXT_MUTED} size={19} strokeWidth={1.8} />
+          </PressableScale>
+        }
+        leading={
+          <Animated.View entering={enter(2)} style={styles.identityCard}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initial}</Text>
+            </View>
 
-        {/* User Card */}
-        <View style={styles.userCard}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>A</Text>
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>Aspirant_123</Text>
-            <Text style={styles.userHandle}>@aspirant_123</Text>
-          </View>
-        </View>
+            <View style={styles.identityText}>
+              <Text style={styles.name} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <Text style={styles.handle} numberOfLines={1}>
+                {account?.is_anonymous ? 'Guest session' : email ?? 'Signed in'}
+              </Text>
+            </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsRow}>
-          <StatTile 
-            label="Day Streak"
-            value="12"
-            icon={<Flame color="#E8B84B" size={24} />}
-          />
-          <StatTile 
-            label="Accuracy"
-            value="68%"
-            icon={<Target color="#34D399" size={24} />}
-          />
-          <StatTile 
-            label="Arena Rating"
-            value="1450"
-            icon={<Trophy color="#9B6FFF" size={24} />}
-          />
-        </View>
+            {snapshot?.readinessBand ? (
+              <View style={styles.bandPill}>
+                <Gauge color={GRADIENT[0]} size={12} strokeWidth={2.2} />
+                <Text style={styles.bandText} numberOfLines={1}>
+                  {snapshot.readinessBand}
+                </Text>
+              </View>
+            ) : null}
+          </Animated.View>
+        }
+      />
 
-        {/* Actions */}
-        <Text style={styles.sectionTitle}>Tools</Text>
-        
-        <TouchableOpacity 
-          style={styles.actionCard} 
-          activeOpacity={0.8}
+      <Animated.View entering={enter(3)}>
+        <SectionHeader title="Where you stand" meta={snapshot ? 'Live' : 'Loading'} />
+      </Animated.View>
+
+      <Animated.View entering={enter(4)} style={styles.statsRow}>
+        <StatTile
+          label="Streak"
+          value={streak}
+          caption={snapshot?.streakDays === 1 ? 'day' : 'days'}
+          icon={Flame}
+          accent={CAUTION}
+        />
+        <StatTile
+          label="Accuracy"
+          value={accuracy}
+          caption="all time"
+          icon={Target}
+          accent={POSITIVE}
+        />
+        <StatTile
+          label="Readiness"
+          value={readiness}
+          caption={snapshot?.readinessBand?.toLowerCase()}
+          icon={Trophy}
+          accent={GRADIENT[1]}
+        />
+      </Animated.View>
+
+      <Animated.View entering={enter(5)} style={styles.sectionSpacer}>
+        <SectionHeader title="Tools" />
+      </Animated.View>
+
+      <SettingsGroup index={4}>
+        <SettingsRow
+          icon={BookOpen}
+          accent={CHALLENGE_TINT}
+          title="Mistake notebook"
+          subtitle="Everything that caught you out, ready to re-practise"
           onPress={() => navigation.navigate('MistakeNotebookScreen')}
-        >
-          <View style={styles.actionIcon}>
-            <BookOpen color="#9B6FFF" size={24} />
-          </View>
-          <View style={styles.actionInfo}>
-            <Text style={styles.actionTitle}>Mistake Notebook</Text>
-            <Text style={styles.actionSub}>Review and practice deferred concepts</Text>
-          </View>
-          <ChevronRight color={colors.hudjeeTextSecondary} size={20} />
-        </TouchableOpacity>
-        
-      </ScrollView>
-    </SafeAreaView>
+        />
+        <SettingsRow
+          icon={Bell}
+          title="Notifications"
+          subtitle="Streaks, challenges and rating changes"
+          onPress={() => navigation.navigate('NotificationsScreen')}
+        />
+        <SettingsRow
+          icon={Swords}
+          accent={CHALLENGE_TINT}
+          title="Challenge history"
+          subtitle="Every challenge that has closed"
+          onPress={() =>
+            navigation.navigate('Challenges', { screen: 'ChallengeHistory' })
+          }
+        />
+      </SettingsGroup>
+
+      <SettingsGroup index={5}>
+        <SettingsRow
+          icon={Settings}
+          title="Settings"
+          subtitle="Account, privacy, data and the way out"
+          onPress={() => navigation.navigate('SettingsStack')}
+        />
+      </SettingsGroup>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { 
-    flex: 1, 
-    backgroundColor: colors.hudjeeBgBase 
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: GLASS,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  container: { 
-    flex: 1 
+
+  identityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    padding: 18,
+    marginBottom: 30,
   },
-  contentPadding: { 
-    padding: 16, 
-    paddingBottom: 40 
+  avatar: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: `${GRADIENT[0]}1F`,
+    borderWidth: 1,
+    borderColor: `${GRADIENT[0]}3D`,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 24 
+  avatarText: { color: GRADIENT[0], fontSize: 22, fontFamily: typography.bold },
+  identityText: { flex: 1, gap: 3 },
+  name: { color: TEXT, fontSize: 17, fontFamily: typography.semiBold, letterSpacing: -0.3 },
+  handle: { color: TEXT_FAINT, fontSize: 12, fontFamily: typography.regular },
+  bandPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: `${GRADIENT[0]}14`,
+    borderWidth: 1,
+    borderColor: `${GRADIENT[0]}30`,
   },
-  headerTitle: { 
-    ...typography.hudjee.headingLg,
-    color: colors.hudjeeTextPrimary,
-  },
-  iconButton: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 22, 
-    backgroundColor: colors.hudjeeSurfaceCardElevated, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  
-  userCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: colors.hudjeeSurfaceCard, 
-    padding: 20, 
-    borderRadius: 24, 
-    marginBottom: 24, 
-  },
-  avatarContainer: { 
-    width: 80, 
-    height: 80, 
-    borderRadius: 40, 
-    backgroundColor: colors.hudjeeSurfaceCardElevated, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginRight: 16 
-  },
-  avatarText: { 
-    ...typography.hudjee.display,
-    color: colors.hudjeeTextPrimary, 
-  },
-  userInfo: { 
-    flex: 1 
-  },
-  userName: { 
-    ...typography.hudjee.headingLg,
-    color: colors.hudjeeTextPrimary, 
-    marginBottom: 4 
-  },
-  userHandle: { 
-    ...typography.hudjee.caption,
-    color: colors.hudjeeTextSecondary, 
-  },
-  
-  statsRow: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap',
-    gap: 12, 
-    marginBottom: 32,
-    justifyContent: 'space-between',
-  },
-  
-  sectionTitle: { 
-    ...typography.hudjee.headingMd,
-    color: colors.hudjeeTextPrimary,
-    marginBottom: 16 
-  },
-  
-  actionCard: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: colors.hudjeeSurfaceCard, 
-    padding: 16, 
-    borderRadius: 20, 
-    marginBottom: 12, 
-  },
-  actionIcon: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 24, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginRight: 16,
-    backgroundColor: '#9B6FFF20'
-  },
-  actionInfo: { 
-    flex: 1 
-  },
-  actionTitle: { 
-    ...typography.hudjee.headingMd,
-    color: colors.hudjeeTextPrimary,
-    fontSize: 16,
-    marginBottom: 2 
-  },
-  actionSub: { 
-    ...typography.hudjee.caption,
-    color: colors.hudjeeTextSecondary,
-  },
+  bandText: { color: GRADIENT[0], fontSize: 11, fontFamily: typography.semiBold },
+
+  statsRow: { flexDirection: 'row', gap: GAP, marginBottom: 30 },
+  sectionSpacer: { marginTop: 2 },
 });

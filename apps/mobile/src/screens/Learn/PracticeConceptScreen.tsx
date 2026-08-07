@@ -1,324 +1,554 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
-  Image,
-  Animated,
   Pressable,
-  ActivityIndicator,
+  Animated as RNAnimated,
+  Easing as RNEasing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bell } from 'lucide-react-native';
+import Animated, {
+  FadeInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { ArrowLeft, Bell, ChevronRight, Layers, ArrowRight } from 'lucide-react-native';
+
+import Skeleton from '../../components/Skeleton';
+import SubjectBackdrop from '../../components/SubjectBackdrop';
+import { HapticService } from '../../services/HapticService';
+import { useSubjectStore } from '../../store/subjectStore';
+import { SUBJECT_COLORS, subjectKeyOf, tintFor } from '../../theme/subjects';
 import { colors } from '../../theme/colors';
+import { typography } from '../../theme/typography';
 import { EngineApi } from '../../services/api';
+import {
+  ChapterProgress,
+  TopicProgress,
+  fetchChapterProgress,
+  fetchTopicProgress,
+} from '../../services/practiceApi';
 
-const SUBJECTS = ['Physics', 'Chemistry', 'Maths'];
+// ─── design tokens (shared with Home and the chapter list) ───────────────────
 
-// ─── Subject Tab Bar (Read-only for this screen, or pops back) ─────────────
-function SubjectTabs({ active, onChange }: { active: string; onChange: (s: string) => void }) {
+const GUTTER = 24;
+const GAP = 12;
+const RADIUS = 18;
+
+const SURFACE = 'rgba(255,255,255,0.05)';
+const SURFACE_BORDER = 'rgba(255,255,255,0.09)';
+const TRACK = 'rgba(255,255,255,0.09)';
+
+const TEXT = colors.hudjeeTextPrimary;
+const TEXT_MUTED = colors.hudjeeTextSecondary;
+const TEXT_FAINT = colors.hudjeeTextTertiary;
+
+const GRADIENT: [string, string] = ['#69EAC0', '#40C9FF'];
+
+const FAST_OUT_SLOW_IN = Easing.bezier(0.4, 0, 0.2, 1);
+const RN_FAST_OUT_SLOW_IN = RNEasing.bezier(0.4, 0, 0.2, 1);
+
+const STAGGER = 40;
+const MAX_STAGGER_STEPS = 10;
+const enter = (index: number) =>
+  FadeInDown.springify()
+    .damping(18)
+    .mass(0.6)
+    .delay(Math.min(index, MAX_STAGGER_STEPS) * STAGGER);
+
+// ─── small helpers ───────────────────────────────────────────────────────────
+
+function formatMinutes(mins: number): string {
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function topicCaption(progress: TopicProgress | undefined): string {
+  if (!progress || progress.questionsSolved === 0) return 'Not started';
+  const solved = `${progress.questionsSolved} solved`;
+  return progress.minutesSpent > 0
+    ? `${solved} · ${formatMinutes(progress.minutesSpent)}`
+    : solved;
+}
+
+// ─── interaction primitives ──────────────────────────────────────────────────
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+function PressableScale({
+  children,
+  onPress,
+  style,
+  scaleTo = 0.96,
+  haptics = true,
+  hitSlop,
+}: {
+  children: React.ReactNode;
+  onPress?: () => void;
+  style?: any;
+  scaleTo?: number;
+  haptics?: boolean;
+  hitSlop?: number;
+}) {
+  const pressed = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - pressed.value * (1 - scaleTo) }],
+    opacity: 1 - pressed.value * 0.1,
+  }));
+
   return (
-    <View style={tabStyles.container}>
-      {SUBJECTS.map((subject) => {
-        const isActive = active === subject;
-        if (isActive) {
-          return (
-            <LinearGradient
-              key={subject}
-              colors={[colors.primaryGradientStart, colors.primaryGradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={tabStyles.activeGradientBorder}
-            >
-              <View style={tabStyles.activeInner}>
-                <Text style={tabStyles.activeLabel}>{subject}</Text>
-              </View>
-            </LinearGradient>
-          );
-        }
-        return (
-          <Pressable key={subject} style={tabStyles.tab} onPress={() => onChange(subject)}>
-            <Text style={tabStyles.label}>{subject}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
+    <AnimatedPressable
+      hitSlop={hitSlop}
+      onPressIn={() => {
+        pressed.value = withTiming(1, { duration: 110, easing: FAST_OUT_SLOW_IN });
+        if (haptics) HapticService.light();
+      }}
+      onPressOut={() => {
+        pressed.value = withSpring(0, { damping: 16, stiffness: 280, mass: 0.5 });
+      }}
+      onPress={onPress}
+      style={[style, animatedStyle]}
+    >
+      {children}
+    </AnimatedPressable>
   );
 }
 
-const tabStyles = StyleSheet.create({
-  container: { flexDirection: 'row', marginHorizontal: 16, marginBottom: 24, backgroundColor: colors.background, borderRadius: 100, padding: 2, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: 100, alignItems: 'center' },
-  activeGradientBorder: { flex: 1, borderRadius: 100, padding: 1.5 },
-  activeInner: { backgroundColor: colors.background, borderRadius: 100, paddingVertical: 9, alignItems: 'center' },
-  label: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
-  activeLabel: { color: colors.text, fontSize: 14, fontWeight: '700' },
-});
-
-// ─── Concept Card ─────────────────────────────────────────────────────────────
-function ConceptCard({ title, progress, delay = 0, onPress }: { title: string, progress: number, delay?: number, onPress: () => void }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(16)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+/** Rolls a number up to its value instead of snapping to it. */
+function CountUp({ value, style, duration = 900 }: { value: number; style?: any; duration?: number }) {
+  const [display, setDisplay] = useState(0);
+  const anim = useRef(new RNAnimated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, delay, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 400, delay, useNativeDriver: true }),
-    ]).start();
-  }, []);
+    const id = anim.addListener(({ value: v }) => setDisplay(Math.round(v)));
+    RNAnimated.timing(anim, {
+      toValue: value,
+      duration,
+      easing: RN_FAST_OUT_SLOW_IN,
+      // Driving a number we read on the JS side, so the native driver can't help.
+      useNativeDriver: false,
+    }).start();
+    return () => anim.removeListener(id);
+  }, [value, duration]);
 
-  return (
-    <Animated.View style={[{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale: scaleAnim }] }, conceptStyles.cardContainer]}>
-      <Pressable
-        onPressIn={() => Animated.spring(scaleAnim, { toValue: 0.96, useNativeDriver: true, friction: 8 }).start()}
-        onPressOut={() => Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 8 }).start()}
-        onPress={onPress}
-      >
-        <View style={conceptStyles.card}>
-          <Text style={conceptStyles.title}>{title}</Text>
-          
-          <View style={conceptStyles.progressContainer}>
-            <Text style={conceptStyles.percentageText}>{progress}/100</Text>
-            <View style={conceptStyles.progressTrack}>
-              <LinearGradient 
-                colors={[colors.primaryGradientStart, colors.primaryGradientEnd]} 
-                start={{x: 0, y: 0}} 
-                end={{x: 1, y: 0}} 
-                style={[conceptStyles.progressFill, { width: `${progress}%` }]} 
-              />
-            </View>
-          </View>
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
+  return <Text style={style}>{display}</Text>;
 }
 
-const conceptStyles = StyleSheet.create({
-  cardContainer: {
-    width: '48%', // roughly half width minus gap
-    marginBottom: 16,
-  },
-  card: { 
-    backgroundColor: '#1A1A1A', 
-    borderRadius: 16, 
-    padding: 16,
-    height: 140,
-    justifyContent: 'space-between'
-  },
-  title: { 
-    color: colors.text, 
-    fontSize: 20, 
-    fontWeight: '700', 
-    lineHeight: 24 
-  },
-  progressContainer: {
-    alignItems: 'flex-end',
-  },
-  percentageText: { 
-    color: colors.textSecondary, 
-    fontSize: 12, 
-    fontWeight: '500',
-    marginBottom: 8
-  },
-  progressTrack: { 
-    height: 6, 
-    width: '100%',
-    backgroundColor: '#333333', 
-    borderRadius: 3, 
-    overflow: 'hidden' 
-  },
-  progressFill: { 
-    height: '100%', 
-    borderRadius: 3 
-  },
-});
+function ProgressBar({
+  value,
+  height = 6,
+  delay = 0,
+  spring = false,
+}: {
+  value: number;
+  height?: number;
+  delay?: number;
+  spring?: boolean;
+}) {
+  const anim = useRef(new RNAnimated.Value(0)).current;
 
-// ─── Chapter Practice Card ──────────────────────────────────────────────────
-function ChapterPracticeCard({ title, progress, onPress }: { title: string, progress: number, onPress: () => void }) {
+  useEffect(() => {
+    const target = Math.max(0, Math.min(100, value));
+    // Width is not a transform, so neither of these can use the native driver.
+    const animation = spring
+      ? RNAnimated.spring(anim, { toValue: target, delay, friction: 9, tension: 42, useNativeDriver: false })
+      : RNAnimated.timing(anim, {
+          toValue: target,
+          duration: 700,
+          delay,
+          easing: RN_FAST_OUT_SLOW_IN,
+          useNativeDriver: false,
+        });
+    animation.start();
+  }, [value, delay, spring]);
+
+  const barWidth = anim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+    extrapolate: 'clamp',
+  });
+
   return (
-    <View style={chapterCardStyles.card}>
-      <View style={chapterCardStyles.headerRow}>
-        <Text style={chapterCardStyles.title}>{title}</Text>
-        <TouchableOpacity style={chapterCardStyles.practiceBtn} onPress={onPress}>
-          <Text style={chapterCardStyles.practiceBtnText}>Practice</Text>
-        </TouchableOpacity>
-      </View>
-      
-      <Text style={chapterCardStyles.masteryText}>Mastery Score</Text>
-      <View style={chapterCardStyles.progressTrack}>
-        <LinearGradient 
-          colors={['#80EEC1', '#34D399']} 
-          start={{x: 0, y: 0}} 
-          end={{x: 1, y: 0}} 
-          style={[chapterCardStyles.progressFill, { width: `${progress}%` }]} 
+    <View style={[styles.track, { height, borderRadius: height / 2 }]}>
+      <RNAnimated.View style={{ width: barWidth, height: '100%' }}>
+        <LinearGradient
+          colors={GRADIENT}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={{ flex: 1, borderRadius: height / 2 }}
         />
-      </View>
-      
-      <View style={chapterCardStyles.statsRow}>
-        <Text style={chapterCardStyles.statText}>10k Ques Solved</Text>
-        <Text style={chapterCardStyles.statText}>147hrs spent</Text>
-      </View>
+      </RNAnimated.View>
     </View>
   );
 }
 
-const chapterCardStyles = StyleSheet.create({
-  card: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 16,
-    marginBottom: 24,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '700',
-    flex: 1,
-  },
-  practiceBtn: {
-    backgroundColor: '#80EEC1',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 12,
-    marginLeft: 16,
-  },
-  practiceBtnText: {
-    color: '#000',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  masteryText: {
-    color: '#A1A1AA',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  progressTrack: {
-    height: 8,
-    backgroundColor: '#333',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  statText: {
-    color: '#71717A',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-});
+// ─── topic row ───────────────────────────────────────────────────────────────
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+/**
+ * Deliberately lighter than the chapter card one level up: a compact row with a
+ * hairline bar, so the hierarchy is legible without reading the titles.
+ */
+function TopicRow({
+  title,
+  index,
+  accent,
+  progress,
+  onPress,
+}: {
+  title: string;
+  index: number;
+  accent: string;
+  progress?: TopicProgress;
+  onPress: () => void;
+}) {
+  const mastery = progress?.masteryPct ?? 0;
+
+  return (
+    <PressableScale onPress={onPress} style={styles.topicCard} scaleTo={0.97}>
+      <View style={styles.topicTop}>
+        <View style={[styles.indexBadge, { backgroundColor: `${accent}22`, borderColor: `${accent}44` }]}>
+          <Text style={[styles.indexText, { color: accent }]}>{String(index + 1).padStart(2, '0')}</Text>
+        </View>
+
+        <View style={styles.topicTitleGroup}>
+          <Text style={styles.topicTitle} numberOfLines={2}>
+            {title}
+          </Text>
+          <Text style={styles.topicCaption}>{topicCaption(progress)}</Text>
+        </View>
+
+        <ChevronRight color={TEXT_FAINT} size={17} strokeWidth={2} />
+      </View>
+
+      <View style={styles.topicBarRow}>
+        <View style={styles.topicBarFlex}>
+          <ProgressBar value={mastery} height={5} delay={80 + index * 40} />
+        </View>
+        <Text style={styles.topicPercent}>{mastery}%</Text>
+      </View>
+    </PressableScale>
+  );
+}
+
+// ─── screen ──────────────────────────────────────────────────────────────────
+
 export default function PracticeConceptScreen({ route, navigation }: any) {
   const { chapterId, chapterName, activeSubject } = route.params;
 
   const [concepts, setConcepts] = useState<any[]>([]);
+  const [topicProgress, setTopicProgress] = useState<Map<string, TopicProgress>>(new Map());
+  const [chapterStats, setChapterStats] = useState<ChapterProgress | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchConcepts = async () => {
-      setLoading(true);
-      const data = await EngineApi.getConcepts(chapterId);
-      setConcepts(data);
-      setLoading(false);
-    };
-    
-    fetchConcepts();
+  // The route param is the authority here; the store is the fallback for a
+  // screen reached without one (a deep link, or Home's continue cards).
+  const storeSubject = useSubjectStore((s) => s.subject);
+  const subjectKey = subjectKeyOf(activeSubject) ?? storeSubject;
+  const accent = subjectKey ? SUBJECT_COLORS[subjectKey] : tintFor(null);
+
+  const load = useCallback(async () => {
+    const data = await EngineApi.getConcepts(chapterId);
+    setConcepts(data);
+    setLoading(false);
+
+    // Progress is merged in afterwards: the topic list is the screen, the
+    // numbers are the polish, and waiting on both would stall the list behind a
+    // query that returns nothing at all for a brand-new student.
+    const [topics, chapters] = await Promise.all([
+      fetchTopicProgress(data.map((c: any) => c.id)),
+      fetchChapterProgress([chapterId]),
+    ]);
+    setTopicProgress(topics);
+    setChapterStats(chapters.get(chapterId) ?? null);
   }, [chapterId]);
 
-  const handleSubjectChange = (subject: string) => {
-    // If they change subject, pop back to PracticeScreen to load that subject's chapters
-    navigation.goBack();
+  // Refreshes on return from a session, so finishing one is visible here.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
+
+  const startChapter = () => {
+    navigation.navigate('AdaptiveSessionScreen', { chapterId, chapterTitle: chapterName });
   };
 
+  const startTopic = (conceptId: string) => {
+    navigation.navigate('AdaptiveSessionScreen', {
+      chapterId,
+      chapterTitle: chapterName,
+      conceptId,
+    });
+  };
+
+  const showSkeleton = loading && concepts.length === 0;
+  const mastery = chapterStats?.masteryPct ?? 0;
+  const started = topicProgress.size
+    ? [...topicProgress.values()].filter((p) => p.questionsSolved > 0).length
+    : 0;
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Image source={require('../../../assets/logo.png')} style={styles.logoImage} resizeMode="contain" />
-        <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-          <Bell color={colors.textSecondary} size={22} />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.root}>
+      <SubjectBackdrop color={tintFor(subjectKey)} />
 
-      {/* Subject Tabs */}
-      <SubjectTabs active={activeSubject} onChange={handleSubjectChange} />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header — a pushed screen leads with the way back, not the logo. */}
+          <Animated.View entering={enter(0)} style={styles.header}>
+            <PressableScale scaleTo={0.9} style={styles.iconButton} onPress={() => navigation.goBack()}>
+              <ArrowLeft color={TEXT} size={19} strokeWidth={2} />
+            </PressableScale>
+            <PressableScale
+              scaleTo={0.9}
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('Profile', { screen: 'NotificationsScreen' })}
+            >
+              <Bell color={TEXT_MUTED} size={19} strokeWidth={1.8} />
+            </PressableScale>
+          </Animated.View>
 
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
-        
-        {/* Chapter Overview Practice Card */}
-        <ChapterPracticeCard 
-          title={chapterName}
-          progress={32}
-          onPress={() => navigation.navigate('AdaptiveSessionScreen', { 
-            chapterId, 
-            chapterTitle: chapterName 
-          })}
-        />
+          {/* Title block. The subject eyebrow is the only breadcrumb needed —
+              the chapter name is the heading right under it. */}
+          <Animated.View entering={enter(1)} style={styles.titleBlock}>
+            <View style={styles.subjectRow}>
+              <View style={[styles.subjectDot, { backgroundColor: accent }]} />
+              <Text style={styles.subjectText}>
+                {activeSubject ? String(activeSubject).toUpperCase() : 'PRACTICE'}
+              </Text>
+            </View>
+            <Text style={styles.title}>{chapterName}</Text>
+          </Animated.View>
 
-        <View style={styles.chapterHeader}>
-          <Text style={styles.chapterTitle}>{chapterName}</Text>
-        </View>
+          {/* Chapter hero */}
+          <Animated.View entering={enter(2)}>
+            {showSkeleton ? (
+              <Skeleton width="100%" height={228} borderRadius={RADIUS} style={{ marginBottom: 32 }} />
+            ) : (
+              <View style={styles.heroCard}>
+                <View style={styles.heroHeader}>
+                  <Text style={styles.eyebrow}>CHAPTER MASTERY</Text>
+                  <View style={styles.topicChip}>
+                    <Layers color={TEXT_MUTED} size={12} strokeWidth={2} />
+                    <Text style={styles.topicChipText}>
+                      {concepts.length} topic{concepts.length === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                </View>
 
-        <View style={styles.gridContainer}>
-          {loading ? (
-            <ActivityIndicator color={colors.primary} style={{ marginTop: 40, alignSelf: 'center', width: '100%' }} />
-          ) : concepts.length === 0 ? (
-            <Text style={{ color: colors.textSecondary, marginTop: 40, textAlign: 'center', width: '100%' }}>
-              No concepts found for this chapter yet.
-            </Text>
-          ) : (
-            concepts.map((concept, idx) => (
-              <ConceptCard
-                key={concept.id}
-                title={concept.title}
-                progress={concept.progress}
-                delay={idx * 50}
-                onPress={() => navigation.navigate('AdaptiveSessionScreen', { 
-                  chapterId, 
-                  chapterTitle: chapterName, 
-                  conceptId: concept.id 
-                })}
-              />
-            ))
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+                <View style={styles.heroValueRow}>
+                  <CountUp value={mastery} style={styles.heroValue} />
+                  <Text style={styles.heroValueSuffix}>/100</Text>
+                </View>
+
+                <ProgressBar value={mastery} delay={120} spring />
+
+                <View style={styles.heroStats}>
+                  <Text style={styles.heroStatText}>
+                    {chapterStats?.questionsSolved ?? 0} solved
+                  </Text>
+                  <View style={styles.heroStatDivider} />
+                  <Text style={styles.heroStatText}>
+                    {formatMinutes(chapterStats?.minutesSpent ?? 0)} spent
+                  </Text>
+                  {concepts.length > 0 ? (
+                    <>
+                      <View style={styles.heroStatDivider} />
+                      <Text style={styles.heroStatText}>
+                        {started}/{concepts.length} topics started
+                      </Text>
+                    </>
+                  ) : null}
+                </View>
+
+                {/* The whole-chapter session: the primary action on this screen,
+                    and the only solid white surface anywhere in the app — nothing
+                    else competes with it for the eye. */}
+                <PressableScale onPress={startChapter} scaleTo={0.97} style={styles.ctaWrap}>
+                  <View style={styles.cta}>
+                    <Text style={styles.ctaText}>Practice this chapter</Text>
+                    <ArrowRight color="#0B0B0C" size={17} strokeWidth={2.4} />
+                  </View>
+                </PressableScale>
+              </View>
+            )}
+          </Animated.View>
+
+          {/* Topics */}
+          <Animated.View entering={enter(3)} style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Topics</Text>
+            {!showSkeleton && concepts.length > 0 ? (
+              <Text style={styles.sectionMeta}>Tap one to drill it</Text>
+            ) : null}
+          </Animated.View>
+
+          <View style={{ gap: GAP }}>
+            {showSkeleton ? (
+              <>
+                <Skeleton width="100%" height={104} borderRadius={RADIUS} />
+                <Skeleton width="100%" height={104} borderRadius={RADIUS} />
+                <Skeleton width="100%" height={104} borderRadius={RADIUS} />
+              </>
+            ) : concepts.length === 0 ? (
+              <Animated.View entering={enter(4)} style={styles.emptyCard}>
+                <View style={styles.emptyIcon}>
+                  <Layers color={TEXT_MUTED} size={19} strokeWidth={1.8} />
+                </View>
+                <Text style={styles.emptyTitle}>No topics yet</Text>
+                <Text style={styles.emptyText}>
+                  This chapter has no topics published. You can still run a chapter-wide session
+                  from the card above.
+                </Text>
+              </Animated.View>
+            ) : (
+              concepts.map((concept, i) => (
+                <Animated.View key={concept.id} entering={enter(4 + i)}>
+                  <TopicRow
+                    title={concept.title}
+                    index={i}
+                    accent={accent}
+                    progress={topicProgress.get(concept.id)}
+                    onPress={() => startTopic(concept.id)}
+                  />
+                </Animated.View>
+              ))
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
+  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  safeArea: { flex: 1 },
   container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 24 },
-  logoImage: { width: 140, height: 40, tintColor: '#FFFFFF' },
-  iconButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'flex-end' },
-  chapterHeader: { paddingHorizontal: 16, marginBottom: 20 },
-  chapterTitle: { color: colors.text, fontSize: 24, fontWeight: '700' },
-  gridContainer: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16 
+  content: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 48 },
+
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
+
+  titleBlock: { marginBottom: 24 },
+  subjectRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  subjectDot: { width: 5, height: 5, borderRadius: 2.5 },
+  subjectText: { color: TEXT_MUTED, fontSize: 10, fontFamily: typography.semiBold, letterSpacing: 1.2 },
+  title: { color: TEXT, fontSize: 28, fontFamily: typography.bold, letterSpacing: -0.5, lineHeight: 35 },
+
+  // Chapter hero
+  heroCard: {
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    padding: 22,
+    marginBottom: 32,
+  },
+  heroHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
+  eyebrow: { color: TEXT_MUTED, fontSize: 11, fontFamily: typography.semiBold, letterSpacing: 1.4 },
+  topicChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  topicChipText: { color: TEXT_MUTED, fontSize: 11, fontFamily: typography.semiBold },
+  heroValueRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 18 },
+  heroValue: { color: TEXT, fontSize: 46, fontFamily: typography.bold, letterSpacing: -1.6, lineHeight: 50 },
+  heroValueSuffix: { color: TEXT_FAINT, fontSize: 15, fontFamily: typography.regular, marginLeft: 4 },
+  heroStats: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14, flexWrap: 'wrap' },
+  heroStatText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
+  heroStatDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
+
+  ctaWrap: { marginTop: 20 },
+  cta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  ctaText: { color: '#0B0B0C', fontSize: 15, fontFamily: typography.bold, letterSpacing: -0.2 },
+
+  // Sections
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 },
+  sectionTitle: { color: TEXT, fontSize: 17, fontFamily: typography.semiBold, letterSpacing: -0.2 },
+  sectionMeta: { color: TEXT_FAINT, fontSize: 12, fontFamily: typography.regular },
+
+  track: { width: '100%', backgroundColor: TRACK, overflow: 'hidden' },
+
+  // Topic rows
+  topicCard: {
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+  },
+  topicTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  indexBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  indexText: { fontSize: 12, fontFamily: typography.bold, letterSpacing: 0.2 },
+  topicTitleGroup: { flex: 1, paddingRight: 10 },
+  topicTitle: { color: TEXT, fontSize: 16, fontFamily: typography.semiBold, letterSpacing: -0.2, lineHeight: 21 },
+  topicCaption: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular, marginTop: 3 },
+  topicBarRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  topicBarFlex: { flex: 1 },
+  topicPercent: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.semiBold, width: 34, textAlign: 'right' },
+
+  // Empty state
+  emptyCard: {
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    padding: 22,
+    alignItems: 'flex-start',
+  },
+  emptyIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  emptyTitle: { color: TEXT, fontSize: 15, fontFamily: typography.semiBold, marginBottom: 5 },
+  emptyText: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.regular, lineHeight: 20 },
 });

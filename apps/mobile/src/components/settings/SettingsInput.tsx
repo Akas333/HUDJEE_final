@@ -1,74 +1,91 @@
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors } from '../../theme/colors';
-import { typography } from '../../theme/typography';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 
-interface SettingsInputProps {
+import { typography } from '../../theme/typography';
+import {
+  GRADIENT,
+  RADIUS_INNER,
+  SURFACE_BORDER,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  TRACK,
+} from '../../theme/ui';
+
+/**
+ * An editable field inside a `SettingsGroup`.
+ *
+ * The label sits above the value rather than beside it, so a long value gets the
+ * full width instead of eliding at forty percent of it. Focus lights the border
+ * in the brand's first gradient stop — the only place a settings screen uses
+ * colour to say something is live.
+ */
+export default function SettingsInput({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  hint,
+  editable = true,
+  ...rest
+}: {
   label: string;
   value: string;
-  onChangeText: (v: string) => void;
-  onSave?: () => void;
-  isDirty?: boolean;
+  onChangeText: (next: string) => void;
   placeholder?: string;
-}
+  /** Sits under the field — a format rule, a reason it is locked. */
+  hint?: string;
+  editable?: boolean;
+} & Omit<TextInputProps, 'value' | 'onChangeText' | 'placeholder' | 'editable' | 'style'>) {
+  const [focused, setFocused] = useState(false);
 
-export function SettingsInput({ label, value, onChangeText, onSave, isDirty, placeholder }: SettingsInputProps) {
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textSecondary}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {isDirty && (
-          <TouchableOpacity style={styles.saveButton} onPress={onSave}>
-            <Text style={styles.saveButtonText}>Save</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+    <View style={styles.row}>
+      <Text style={styles.label}>{label.toUpperCase()}</Text>
+
+      <TextInput
+        style={[
+          styles.input,
+          focused && styles.inputFocused,
+          !editable && styles.inputLocked,
+        ]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor={TEXT_FAINT}
+        editable={editable}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        autoCapitalize="none"
+        autoCorrect={false}
+        {...rest}
+      />
+
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    marginBottom: 12,
-  },
+  row: { paddingHorizontal: 16, paddingVertical: 16, gap: 8 },
   label: {
-    ...typography.hudjee.caption,
-    color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    color: TEXT_FAINT,
+    fontSize: 10,
+    fontFamily: typography.bold,
+    letterSpacing: 1.2,
   },
   input: {
-    flex: 1,
-    ...typography.hudjee.body,
-    color: colors.text,
-    padding: 0,
+    backgroundColor: TRACK,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    borderRadius: RADIUS_INNER,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: TEXT,
+    fontSize: 15,
+    fontFamily: typography.medium,
   },
-  saveButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginLeft: 12,
-  },
-  saveButtonText: {
-    ...typography.hudjee.label,
-    color: colors.background, // or another contrast color
-  },
+  inputFocused: { borderColor: GRADIENT[0] },
+  inputLocked: { color: TEXT_MUTED },
+  hint: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.regular, lineHeight: 17 },
 });

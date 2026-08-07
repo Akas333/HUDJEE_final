@@ -1,34 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  KeyboardAvoidingView,
   Modal,
-  View,
+  Platform,
+  Pressable,
+  StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  TouchableWithoutFeedback,
+  View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
+  Easing,
   runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
 } from 'react-native-reanimated';
-import { colors } from '../../theme/colors';
+import { AlertTriangle } from 'lucide-react-native';
+
+import PressableScale from '../PressableScale';
 import { typography } from '../../theme/typography';
+import { colors } from '../../theme/colors';
+import {
+  NEGATIVE,
+  RADIUS_INNER,
+  SURFACE,
+  SURFACE_BORDER,
+  SURFACE_STRONG,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  TRACK,
+} from '../../theme/ui';
 
-interface DestructiveActionSheetProps {
-  visible: boolean;
-  title: string;
-  description: string;
-  confirmText: string;
-  confirmIsTyped?: boolean;
-  typedWord?: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
+const FAST_OUT_SLOW_IN = Easing.bezier(0.4, 0, 0.2, 1);
 
-export function DestructiveActionSheet({
+/**
+ * The confirmation for anything that cannot be undone.
+ *
+ * It is red, not amber. The old sheet used the streak-at-risk amber for "delete
+ * my account", which is the colour this app uses to mean "you can still fix
+ * this" — precisely the wrong promise. Amber stays with the streak; destruction
+ * gets its own hue and nothing else in Settings is allowed to use it.
+ */
+export default function DestructiveActionSheet({
   visible,
   title,
   description,
@@ -37,166 +53,179 @@ export function DestructiveActionSheet({
   typedWord,
   onConfirm,
   onCancel,
-}: DestructiveActionSheetProps) {
-  const [inputValue, setInputValue] = useState('');
-  const [showModal, setShowModal] = useState(visible);
+}: {
+  visible: boolean;
+  title: string;
+  description: string;
+  confirmText: string;
+  /** Requires the word to be typed out — for the genuinely unrecoverable. */
+  confirmIsTyped?: boolean;
+  typedWord?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [typed, setTyped] = useState('');
+  const [mounted, setMounted] = useState(visible);
 
-  const opacity = useSharedValue(0);
-  const translateY = useSharedValue(300);
+  const progress = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      setShowModal(true);
-      opacity.value = withTiming(1, { duration: 250 });
-      translateY.value = withTiming(0, { duration: 250 });
+      setTyped('');
+      setMounted(true);
+      progress.value = withTiming(1, { duration: 240, easing: FAST_OUT_SLOW_IN });
     } else {
-      opacity.value = withTiming(0, { duration: 250 });
-      translateY.value = withTiming(300, { duration: 250 }, () => {
-        runOnJS(setShowModal)(false);
+      progress.value = withTiming(0, { duration: 200, easing: FAST_OUT_SLOW_IN }, (done) => {
+        if (done) runOnJS(setMounted)(false);
       });
-      setInputValue(''); // Reset input
     }
-  }, [visible, opacity, translateY]);
+  }, [visible, progress]);
 
-  const animatedBackgroundStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
+  const sheetStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: (1 - progress.value) * 260 }],
   }));
 
-  const animatedContentStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
+  if (!mounted) return null;
 
-  if (!showModal) return null;
-
-  const isConfirmDisabled = confirmIsTyped && inputValue !== typedWord;
+  const locked = Boolean(confirmIsTyped && typed.trim() !== typedWord);
 
   return (
-    <Modal visible={showModal} transparent animationType="none">
-      <View style={styles.overlay}>
-        <TouchableWithoutFeedback onPress={onCancel}>
-          <Animated.View style={[styles.background, animatedBackgroundStyle]} />
-        </TouchableWithoutFeedback>
-        <Animated.View style={[styles.content, animatedContentStyle]}>
-          <View style={styles.dragIndicator} />
-          
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.description}>{description}</Text>
-
-          {confirmIsTyped && typedWord && (
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>
-                Type <Text style={styles.boldWord}>{typedWord}</Text> to confirm
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={inputValue}
-                onChangeText={setInputValue}
-                placeholder={typedWord}
-                placeholderTextColor={colors.textSecondary}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[styles.confirmButton, isConfirmDisabled && styles.confirmButtonDisabled]}
-            disabled={isConfirmDisabled}
-            onPress={onConfirm}
-          >
-            <Text style={styles.confirmButtonText}>{confirmText}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
+    <Modal visible transparent animationType="none" onRequestClose={onCancel}>
+      <View style={styles.root}>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.scrim, scrimStyle]}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={onCancel}
+            accessibilityLabel="Dismiss"
+          />
         </Animated.View>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.sheetWrap}
+          pointerEvents="box-none"
+        >
+          <Animated.View
+            style={[styles.sheet, { paddingBottom: 24 + insets.bottom }, sheetStyle]}
+          >
+            <View style={styles.grabber} />
+
+            <View style={styles.warnDisc}>
+              <AlertTriangle color={NEGATIVE} size={20} strokeWidth={2} />
+            </View>
+
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.description}>{description}</Text>
+
+            {confirmIsTyped && typedWord ? (
+              <View style={styles.typeBlock}>
+                <Text style={styles.typeLabel}>
+                  Type <Text style={styles.typeWord}>{typedWord}</Text> to confirm
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={typed}
+                  onChangeText={setTyped}
+                  placeholder={typedWord}
+                  placeholderTextColor={TEXT_FAINT}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+              </View>
+            ) : null}
+
+            <PressableScale
+              scaleTo={0.97}
+              disabled={locked}
+              onPress={onConfirm}
+              style={[styles.confirm, locked && styles.confirmLocked]}
+              accessibilityLabel={confirmText}
+            >
+              <Text style={styles.confirmText}>{confirmText}</Text>
+            </PressableScale>
+
+            <PressableScale scaleTo={0.97} onPress={onCancel} style={styles.cancel}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </PressableScale>
+          </Animated.View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  background: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  content: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
+  root: { flex: 1, justifyContent: 'flex-end' },
+  scrim: { backgroundColor: colors.hudjeeOverlayScrim },
+  sheetWrap: { justifyContent: 'flex-end' },
+
+  sheet: {
+    backgroundColor: SURFACE,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderBottomWidth: 0,
+    borderColor: SURFACE_BORDER,
+    paddingHorizontal: 24,
+    paddingTop: 12,
   },
-  dragIndicator: {
-    width: 40,
+  grabber: {
+    width: 36,
     height: 4,
-    backgroundColor: colors.border,
     borderRadius: 2,
+    backgroundColor: SURFACE_STRONG,
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: 22,
   },
-  title: {
-    ...typography.hudjee.headingMd,
-    color: colors.text,
-    marginBottom: 12,
-  },
-  description: {
-    ...typography.hudjee.body,
-    color: colors.textSecondary,
-    marginBottom: 24,
-  },
-  inputContainer: {
-    marginBottom: 24,
-  },
-  inputLabel: {
-    ...typography.hudjee.caption,
-    color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  boldWord: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  input: {
-    backgroundColor: colors.background,
+  warnDisc: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: `${NEGATIVE}1F`,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 16,
-    ...typography.hudjee.body,
-    color: colors.text,
-  },
-  confirmButton: {
-    backgroundColor: colors.amberRisk, // Or error color if we had one, instructions said use warm amber for at-risk
-    paddingVertical: 16,
-    borderRadius: 16,
+    borderColor: `${NEGATIVE}3D`,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
-    // 3D effect
-    borderBottomWidth: 5,
-    borderBottomColor: '#D97706', // Darker amber
+    marginBottom: 16,
   },
-  confirmButtonDisabled: {
-    opacity: 0.5,
+  title: { color: TEXT, fontSize: 20, fontFamily: typography.bold, letterSpacing: -0.3 },
+  description: {
+    color: TEXT_MUTED,
+    fontSize: 14,
+    fontFamily: typography.regular,
+    lineHeight: 21,
+    marginTop: 8,
+    marginBottom: 24,
   },
-  confirmButtonText: {
-    ...typography.hudjee.label,
-    color: colors.background,
+
+  typeBlock: { marginBottom: 24, gap: 8 },
+  typeLabel: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.regular },
+  typeWord: { color: TEXT, fontFamily: typography.bold },
+  input: {
+    backgroundColor: TRACK,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    borderRadius: RADIUS_INNER,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: TEXT,
+    fontSize: 15,
+    fontFamily: typography.medium,
+    letterSpacing: 1,
   },
-  cancelButton: {
-    paddingVertical: 16,
+
+  confirm: {
+    backgroundColor: NEGATIVE,
     borderRadius: 16,
+    paddingVertical: 15,
     alignItems: 'center',
   },
-  cancelButtonText: {
-    ...typography.hudjee.label,
-    color: colors.text,
-  },
+  confirmLocked: { opacity: 0.35 },
+  confirmText: { color: '#1A0B0B', fontSize: 15, fontFamily: typography.bold },
+
+  cancel: { paddingVertical: 15, alignItems: 'center', marginTop: 4 },
+  cancelText: { color: TEXT_MUTED, fontSize: 15, fontFamily: typography.medium },
 });
