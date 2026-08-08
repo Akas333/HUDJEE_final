@@ -1,214 +1,182 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Animated,
-  Switch
-} from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Zap, Check, Lock, Play } from 'lucide-react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Bell, ChevronRight, Gauge } from 'lucide-react-native';
+
+import PressableScale from '../../components/PressableScale';
+import SubjectBackdrop from '../../components/SubjectBackdrop';
 import { colors } from '../../theme/colors';
-import { ArenaChapter, ArenaRating } from '../../services/api.mock';
-import { EngineApi } from '../../services/api';
+import { typography } from '../../theme/typography';
+import { DEFAULT_TINT } from '../../theme/subjects';
+import {
+  ARENA_MODES,
+  ArenaMode,
+  GAP,
+  GUTTER,
+  RADIUS,
+  SURFACE,
+  SURFACE_BORDER,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+} from '../../theme/arena';
 
-export default function ArenaScreen({ navigation }: any) {
-  const [chapters, setChapters] = useState<ArenaChapter[]>([]);
-  const [ratingData, setRatingData] = useState<ArenaRating | null>(null);
-  const [loading, setLoading] = useState(true);
-  
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [timedMode, setTimedMode] = useState(false);
+// Entrance timing, matching Practice: cards settle in sequence rather than all
+// arriving at once.
+const enter = (index: number) =>
+  FadeInDown.springify().damping(18).mass(0.6).delay(Math.min(index, 10) * 40);
 
-  const headerFade = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      const [rData, cData] = await Promise.all([
-        EngineApi.getArenaRating(),
-        EngineApi.getArenaChapters()
-      ]);
-      setRatingData(rData);
-      setChapters(cData);
-      setLoading(false);
-
-      Animated.timing(headerFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    };
-
-    const unsubscribe = navigation.addListener('focus', fetchData);
-    fetchData();
-    return unsubscribe;
-  }, [navigation]);
-
-  const toggleSelection = (id: string) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    setSelectedIds(newSet);
-  };
-
-  const handleQuickStart = () => {
-    const eligibleIds = chapters.filter(c => c.eligible).map(c => c.chapter_id);
-    setSelectedIds(new Set(eligibleIds));
-  };
-
-  const handleEnterArena = () => {
-    if (selectedIds.size === 0) return;
-    navigation.navigate('ActiveArenaSession', { 
-      chapterIds: Array.from(selectedIds), 
-      timedMode 
-    });
-  };
+function ModeCard({ mode, index, onPress }: { mode: ArenaMode; index: number; onPress: () => void }) {
+  const Icon = mode.icon;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-        
-        <Animated.View style={[styles.ratingHeader, { opacity: headerFade }]}>
-          <View style={styles.ratingBox}>
-            <Zap color="#E8B84B" size={32} />
-            <Text style={styles.ratingNumber}>{ratingData?.rating || '---'}</Text>
-            <View style={styles.tierBadge}>
-              <Text style={styles.tierText}>{ratingData?.tier_label?.toUpperCase() || 'LOADING'}</Text>
+    <Animated.View entering={enter(3 + index)}>
+      <PressableScale onPress={onPress} style={styles.card} scaleTo={0.97}>
+        <View style={styles.cardTop}>
+          <View
+            style={[
+              styles.iconBadge,
+              { backgroundColor: `${mode.accent}22`, borderColor: `${mode.accent}44` },
+            ]}
+          >
+            <Icon color={mode.accent} size={20} strokeWidth={2} />
+          </View>
+
+          <View style={styles.cardTitleGroup}>
+            <Text style={styles.cardTitle}>{mode.name}</Text>
+            <View style={styles.metaRow}>
+              <View style={[styles.metaDot, { backgroundColor: mode.accent }]} />
+              <Text style={styles.metaText}>{mode.meta}</Text>
             </View>
           </View>
-          <Text style={styles.ratingSubtitle}>Cross-Concept Arena</Text>
-        </Animated.View>
 
-        {loading ? (
-          <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
-        ) : (
-          <View style={styles.content}>
-            
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Select Chapters</Text>
-              <TouchableOpacity onPress={handleQuickStart}>
-                <Text style={styles.quickStartText}>Select All Eligible</Text>
-              </TouchableOpacity>
-            </View>
+          <ChevronRight color={TEXT_FAINT} size={18} strokeWidth={2} />
+        </View>
 
-            <View style={styles.chapterList}>
-              {chapters.map(chapter => {
-                const isSelected = selectedIds.has(chapter.chapter_id);
-                
-                if (chapter.eligible) {
-                  return (
-                    <TouchableOpacity
-                      key={chapter.chapter_id}
-                      style={[styles.chapterChip, isSelected && styles.chapterChipSelected]}
-                      onPress={() => toggleSelection(chapter.chapter_id)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                          {isSelected && <Check size={14} color="#000" />}
-                        </View>
-                        <View>
-                          <Text style={[styles.chapterName, isSelected && { color: colors.primary }]}>{chapter.name}</Text>
-                          <Text style={styles.chapterSubject}>{chapter.subject}</Text>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                } else {
-                  return (
-                    <View key={chapter.chapter_id} style={styles.chapterChipLocked}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <View style={styles.lockedIcon}>
-                          <Lock size={16} color={colors.textSecondary} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.chapterNameLocked}>{chapter.name}</Text>
-                          <Text style={styles.chapterSubject}>{chapter.subject}</Text>
-                          <View style={styles.lockedReasonBox}>
-                            <Text style={styles.lockedReasonText}>Reach {chapter.eligibility_threshold}% mastery in Practice to unlock ({chapter.mastery_pct}% currently)</Text>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                }
-              })}
-            </View>
+        <Text style={styles.cardTagline}>{mode.tagline}</Text>
+      </PressableScale>
+    </Animated.View>
+  );
+}
 
-            <View style={styles.timedModeContainer}>
-              <View>
-                <Text style={styles.timedModeTitle}>Timed Mode</Text>
-                <Text style={styles.timedModeDesc}>60s per question</Text>
-              </View>
-              <Switch
-                value={timedMode}
-                onValueChange={setTimedMode}
-                trackColor={{ false: colors.surfaceLight, true: colors.primary }}
-                thumbColor={colors.text}
-              />
-            </View>
+/**
+ * The Arena tab lands on a choice of format, not on a session. Which of the four
+ * a student wants says more about their intent right now — grind, sprint, hit a
+ * number, sit a paper — than any single "start" button could.
+ */
+export default function ArenaScreen({ navigation }: any) {
+  return (
+    <View style={styles.root}>
+      {/* Arena is not scoped to one subject until the student picks chapters, so
+          the landing screen wears the brand tint rather than a subject's. */}
+      <SubjectBackdrop color={DEFAULT_TINT} />
 
-          </View>
-        )}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.enterBtn, selectedIds.size === 0 && styles.enterBtnDisabled]}
-          disabled={selectedIds.size === 0}
-          onPress={handleEnterArena}
-          activeOpacity={0.8}
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={[styles.enterBtnText, selectedIds.size === 0 && { color: colors.textSecondary }]}>
-            {selectedIds.size === 0 ? 'Select chapters to enter' : 'Enter Arena'}
-          </Text>
-          {selectedIds.size > 0 && <Play size={20} color="#000" fill="#000" />}
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+          <Animated.View entering={enter(0)} style={styles.header}>
+            <Image source={require('../../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
+            <PressableScale
+              scaleTo={0.9}
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('Profile', { screen: 'NotificationsScreen' })}
+            >
+              <Bell color={TEXT_MUTED} size={19} strokeWidth={1.8} />
+            </PressableScale>
+          </Animated.View>
+
+          <Animated.View entering={enter(1)} style={styles.titleBlock}>
+            <Text style={styles.title}>Arena</Text>
+            <Text style={styles.subtitle}>Pick a format, then choose what to be tested on</Text>
+          </Animated.View>
+
+          <Animated.View entering={enter(2)} style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Modes</Text>
+            <Text style={styles.sectionMeta}>{ARENA_MODES.length} formats</Text>
+          </Animated.View>
+
+          <View style={{ gap: GAP }}>
+            {ARENA_MODES.map((mode, i) => (
+              <ModeCard
+                key={mode.id}
+                mode={mode}
+                index={i}
+                onPress={() => navigation.navigate('ArenaSetup', { modeId: mode.id })}
+              />
+            ))}
+          </View>
+
+          <Animated.View entering={enter(8)} style={styles.footerNote}>
+            <Gauge color={TEXT_FAINT} size={14} strokeWidth={1.8} />
+            <Text style={styles.footerText}>Every subject keeps its own live difficulty</Text>
+          </Animated.View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  
-  ratingHeader: { alignItems: 'center', paddingVertical: 40, borderBottomWidth: 1, borderBottomColor: colors.border },
-  ratingBox: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  ratingNumber: { color: colors.text, fontSize: 56, fontWeight: '800', letterSpacing: -2 },
-  tierBadge: { backgroundColor: '#E8B84B20', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 100, borderWidth: 1, borderColor: '#E8B84B50', marginLeft: 8 },
-  tierText: { color: '#E8B84B', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
-  ratingSubtitle: { color: colors.textSecondary, fontSize: 15, fontWeight: '500', letterSpacing: 0.5, textTransform: 'uppercase' },
+  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  safeArea: { flex: 1 },
+  container: { flex: 1 },
+  content: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 48 },
 
-  content: { padding: 16 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, marginTop: 16 },
-  sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  quickStartText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 },
+  logo: { width: 120, height: 30, tintColor: '#FFFFFF' },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: SURFACE,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
-  chapterList: { gap: 12, marginBottom: 32 },
-  
-  chapterChip: { backgroundColor: colors.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  chapterChipSelected: { borderColor: colors.primary, backgroundColor: '#9B6FFF10' },
-  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
-  checkboxSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  
-  chapterName: { color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  chapterSubject: { color: colors.textSecondary, fontSize: 12, fontWeight: '500', textTransform: 'uppercase', letterSpacing: 0.5 },
+  titleBlock: { marginBottom: 32 },
+  title: { color: TEXT, fontSize: 28, fontFamily: typography.bold, letterSpacing: -0.4 },
+  subtitle: { color: TEXT_MUTED, fontSize: 15, fontFamily: typography.regular, marginTop: 6 },
 
-  chapterChipLocked: { backgroundColor: colors.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border, opacity: 0.7 },
-  lockedIcon: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
-  chapterNameLocked: { color: colors.textSecondary, fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  lockedReasonBox: { marginTop: 8, backgroundColor: colors.surfaceLight, padding: 8, borderRadius: 6 },
-  lockedReasonText: { color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 },
+  sectionTitle: { color: TEXT, fontSize: 17, fontFamily: typography.semiBold, letterSpacing: -0.2 },
+  sectionMeta: { color: TEXT_FAINT, fontSize: 12, fontFamily: typography.regular },
 
-  timedModeContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  timedModeTitle: { color: colors.text, fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  timedModeDesc: { color: colors.textSecondary, fontSize: 13 },
+  card: {
+    backgroundColor: SURFACE,
+    borderRadius: RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    padding: 20,
+  },
+  cardTop: { flexDirection: 'row', alignItems: 'center' },
+  iconBadge: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  cardTitleGroup: { flex: 1, paddingRight: 12 },
+  cardTitle: { color: TEXT, fontSize: 18, fontFamily: typography.semiBold, letterSpacing: -0.3 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
+  metaDot: { width: 5, height: 5, borderRadius: 2.5 },
+  metaText: { color: TEXT_MUTED, fontSize: 10, fontFamily: typography.semiBold, letterSpacing: 1 },
+  cardTagline: {
+    color: TEXT_MUTED,
+    fontSize: 13,
+    fontFamily: typography.regular,
+    lineHeight: 20,
+    marginTop: 16,
+  },
 
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background },
-  enterBtn: { backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 100, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
-  enterBtnDisabled: { backgroundColor: colors.surfaceLight },
-  enterBtnText: { color: '#000', fontSize: 16, fontWeight: '700' }
+  footerNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 28 },
+  footerText: { color: TEXT_FAINT, fontSize: 12, fontFamily: typography.regular },
 });

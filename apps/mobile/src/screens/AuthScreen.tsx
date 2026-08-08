@@ -71,11 +71,10 @@ export default function AuthScreen() {
     if (loading) return;
     setLoading(true);
     try {
-      const session = await signInWithGoogle();
-      // A null session means the student backed out of the Google sheet.
-      // That's not a failure, so stay quiet.
-      if (session) showToast('Welcome to HudJee', 'success');
-      // AppNavigator swaps to the main tabs via onAuthStateChange.
+      await signInWithGoogle();
+      // No success toast: AppNavigator swaps to the main tabs via
+      // onAuthStateChange, and landing on Home is the confirmation. A banner
+      // over the greeting only gets in the way of it. Failures still speak up.
     } catch (e: any) {
       showToast(e?.message ?? 'Sign in failed. Please try again.', 'error');
     } finally {
@@ -88,8 +87,7 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       await signInAsGuest();
-      showToast('Signed in as guest', 'success');
-      // AppNavigator swaps to the main tabs via onAuthStateChange.
+      // Silent on success, for the same reason as the Google path above.
     } catch (e: any) {
       showToast(e?.message ?? 'Guest sign in failed.', 'error');
     } finally {
