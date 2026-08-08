@@ -23,6 +23,7 @@ import { ArrowLeft, Bell, ChevronRight, Layers, ArrowRight } from 'lucide-react-
 
 import Skeleton from '../../components/Skeleton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
+import GradientButton from '../../components/ui/GradientButton';
 import { HapticService } from '../../services/HapticService';
 import { useSubjectStore } from '../../store/subjectStore';
 import { SUBJECT_COLORS, subjectKeyOf, tintFor } from '../../theme/subjects';
@@ -373,14 +374,17 @@ export default function PracticeConceptScreen({ route, navigation }: any) {
                 </View>
 
                 {/* The whole-chapter session: the primary action on this screen,
-                    and the only solid white surface anywhere in the app — nothing
-                    else competes with it for the eye. */}
-                <PressableScale onPress={startChapter} scaleTo={0.97} style={styles.ctaWrap}>
-                  <View style={styles.cta}>
-                    <Text style={styles.ctaText}>Practice this chapter</Text>
-                    <ArrowRight color="#0B0B0C" size={17} strokeWidth={2.4} />
-                  </View>
-                </PressableScale>
+                    and the same accent-outlined pill Home leads with, so the
+                    student meets one button shape wherever the app wants them to
+                    start practising. */}
+                <GradientButton
+                  label="Practice this chapter"
+                  icon={<ArrowRight color="#FFFFFF" size={17} strokeWidth={2.4} />}
+                  onPress={startChapter}
+                  height={50}
+                  block
+                  style={styles.ctaWrap}
+                />
               </View>
             )}
           </Animated.View>
@@ -486,16 +490,6 @@ const styles = StyleSheet.create({
   heroStatDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
 
   ctaWrap: { marginTop: 20 },
-  cta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 50,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-  },
-  ctaText: { color: '#0B0B0C', fontSize: 15, fontFamily: typography.bold, letterSpacing: -0.2 },
 
   // Sections
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 },

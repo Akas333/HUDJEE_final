@@ -49,6 +49,15 @@ export const TEXT_FAINT = colors.hudjeeTextTertiary;
 // ─── accents ─────────────────────────────────────────────────────────────────
 
 export const GRADIENT: [string, string] = ['#69EAC0', '#40C9FF'];
+
+/**
+ * The ramp the primary button is *outlined* in — indigo on the left, unlit
+ * through the middle, warm brass on the right. It only ever draws a 1.5pt
+ * border around a near-black fill: the point of it is that the app's one loud
+ * accent costs no surface area, so a flat card stack stays flat. Do not fill a
+ * shape with it.
+ */
+export const ACCENT_GRADIENT: [string, string, string] = ['#6D5DF6', '#4A4A63', '#C99A6B'];
 export const POSITIVE = '#3FE8A6';
 export const NEGATIVE = '#F87171';
 export const CAUTION = '#F0B65C';

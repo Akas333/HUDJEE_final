@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 import {
   Bell,
   Flame,
@@ -32,9 +32,10 @@ import {
 
 import Skeleton from '../components/Skeleton';
 import PressableScale from '../components/PressableScale';
+import GradientButton from '../components/ui/GradientButton';
 import { HapticService } from '../services/HapticService';
-import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { ACCENT_GRADIENT } from '../theme/ui';
 import { subjectKeyOf } from '../theme/subjects';
 import { useHomeStore } from '../store/homeStore';
 import { useSubjectStore } from '../store/subjectStore';
@@ -50,8 +51,11 @@ import {
 const { width } = Dimensions.get('window');
 
 // ─── design tokens ───────────────────────────────────────────────────────────
-// Deliberately the same system as AuthScreen: 24pt gutter, Nunito throughout,
-// translucent white surfaces over the indigo→black wash, hairline borders.
+// Flat dark system: a pure-black page, solid lifted cards, solid hairline
+// borders, and one saturated accent. Nothing on this screen is translucent,
+// gradient-filled or glossy — depth comes from the step between #0A0A0C,
+// #131317 and #1B1B20 alone, so a card reads the same wherever it lands in the
+// scroll instead of picking up whatever is behind it.
 
 const GUTTER = 24;
 const GAP = 12;
@@ -63,21 +67,30 @@ const RADIUS = 18;
 // which can only ever page by the viewport width.
 const SLIDE_WIDTH = CARD_WIDTH + GAP;
 
-const SURFACE = 'rgba(255,255,255,0.05)';
-const SURFACE_BORDER = 'rgba(255,255,255,0.09)';
-const TRACK = 'rgba(255,255,255,0.09)';
+/** The page. Near-black, no wash behind it. */
+const BG = '#0A0A0C';
+/** Cards sit one step off the page… */
+const SURFACE = '#131317';
+/** …and anything nested inside a card sits one step off the card. */
+const SURFACE_SUBTLE = '#1B1B20';
+const SURFACE_STRONG = '#232329';
+const SURFACE_BORDER = '#26262C';
+const TRACK = '#26262C';
 
-const TEXT = colors.hudjeeTextPrimary;
-const TEXT_MUTED = colors.hudjeeTextSecondary;
-const TEXT_FAINT = colors.hudjeeTextTertiary;
+const TEXT = '#FFFFFF';
+const TEXT_MUTED = '#9CA3AF';
+const TEXT_FAINT = '#6B7280';
 
-const GRADIENT: [string, string] = ['#69EAC0', '#40C9FF'];
-const BACKDROP: [string, string, string] = ['#1E1B4B', '#0B0B0C', '#0B0B0C'];
+/** The one accent. Bars and arcs are filled flat with it — no gradient stops. */
+const ACCENT = '#38BDF8';
+
+const POSITIVE = '#22C55E';
+const NEGATIVE = '#EF4444';
 
 const SUBJECT_COLORS: Record<string, string> = {
-  physics: '#60A5FA',
-  chemistry: '#F59E0B',
-  maths: '#A78BFA',
+  physics: '#38BDF8',
+  chemistry: '#22C55E',
+  maths: '#A855F7',
 };
 
 // Material's fast-out-slow-in. Nothing on this screen moves linearly.
@@ -114,10 +127,10 @@ function minutesParts(mins: number): { value: string; unit: string } {
 // Declared here because `BAND_COLORS` below is built from them at module load.
 
 const MARK_DONE = '#FFFFFF';
-const MARK_TODAY = 'rgba(255,255,255,0.85)';
-const MARK_PARTIAL = 'rgba(255,255,255,0.45)';
-const MARK_MISSED = 'rgba(255,255,255,0.30)';
-const MARK_FUTURE = 'rgba(255,255,255,0.14)';
+const MARK_TODAY = '#E5E7EB';
+const MARK_PARTIAL = '#6B7280';
+const MARK_MISSED = '#4B5563';
+const MARK_FUTURE = '#2A2A30';
 
 // ─── qualitative bands ───────────────────────────────────────────────────────
 // Each stat card carries a mark saying whether its number is any good. These
@@ -134,7 +147,7 @@ const BAND_COLORS: Record<Tone, string> = {
   good: MARK_DONE,
   ok: MARK_PARTIAL,
   // Same weight as a missed day in the strip: present, but not asking for
-  // attention. The 14% used for future days disappears entirely at this size.
+  // attention. The grey used for future days disappears entirely at this size.
   idle: MARK_MISSED,
 };
 
@@ -266,14 +279,14 @@ function ProgressBar({
 
   return (
     <View style={[styles.track, { height, borderRadius: height / 2 }]}>
-      <RNAnimated.View style={{ width: barWidth, height: '100%' }}>
-        <LinearGradient
-          colors={GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={{ flex: 1, borderRadius: height / 2 }}
-        />
-      </RNAnimated.View>
+      <RNAnimated.View
+        style={{
+          width: barWidth,
+          height: '100%',
+          borderRadius: height / 2,
+          backgroundColor: ACCENT,
+        }}
+      />
     </View>
   );
 }
@@ -341,18 +354,12 @@ function ScoreRing({
   return (
     <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Defs>
-          <SvgGradient id="ringGradient" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={GRADIENT[0]} />
-            <Stop offset="1" stopColor={GRADIENT[1]} />
-          </SvgGradient>
-        </Defs>
         <Circle cx={size / 2} cy={size / 2} r={radius} stroke={TRACK} strokeWidth={stroke} fill="none" />
         <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="url(#ringGradient)"
+          stroke={ACCENT}
           strokeWidth={stroke}
           strokeLinecap="round"
           fill="none"
@@ -373,6 +380,8 @@ function ScoreRing({
 const WEEK_CARD_PADDING = 14;
 const DAY_CELL_WIDTH = (CARD_WIDTH - WEEK_CARD_PADDING * 2) / 7;
 const DAY_GLYPH = 26;
+/** The accent ring around today's cell — same weight as the primary button's. */
+const DAY_FRAME = 1.5;
 
 /**
  * The mark inside a day cell. A ring for anything in progress, a filled check
@@ -437,6 +446,52 @@ function DayGlyph({ day, size = DAY_GLYPH }: { day: DayProgress; size?: number }
   );
 }
 
+/**
+ * One column of the week strip.
+ *
+ * Today is the only cell drawn with the accent ramp around it — the same
+ * outline the primary CTA wears, so the two accented things on Home are
+ * obviously the same system. Every other day gets an identical box with a
+ * transparent frame in place of the gradient, which is what keeps the seven
+ * columns exactly the same size: the frame is a 1.5pt padding ring, not a
+ * border, because React Native cannot put a gradient in `borderColor`.
+ */
+function DayBox({ day }: { day: DayProgress }) {
+  const inner = (
+    <View
+      style={[
+        styles.dayInner,
+        day.status === 'future' && styles.dayInnerFuture,
+        day.isToday && styles.dayInnerToday,
+      ]}
+    >
+      <DayGlyph day={day} />
+      <Text
+        style={[
+          styles.dayLabel,
+          day.status === 'future' && styles.dayLabelFuture,
+          day.isToday && styles.dayLabelToday,
+        ]}
+      >
+        {day.label}
+      </Text>
+    </View>
+  );
+
+  if (!day.isToday) return <View style={styles.dayFrame}>{inner}</View>;
+
+  return (
+    <LinearGradient
+      colors={ACCENT_GRADIENT}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.dayFrame}
+    >
+      {inner}
+    </LinearGradient>
+  );
+}
+
 /** Header counter: an icon and a done/target pair. */
 function GoalCounter({ icon, done, target }: { icon: React.ReactNode; done: number; target: number }) {
   return (
@@ -495,27 +550,7 @@ function WeekStrip({
       <View style={styles.weekRow}>
         {week.map((day) => (
           <View key={day.key} style={styles.dayCell}>
-            <View
-              style={[
-                styles.dayInner,
-                day.status === 'future' && styles.dayInnerFuture,
-                day.isToday && styles.dayInnerToday,
-              ]}
-            >
-              <DayGlyph day={day} />
-              <Text
-                style={[
-                  styles.dayLabel,
-                  day.status === 'future' && styles.dayLabelFuture,
-                  day.isToday && styles.dayLabelToday,
-                ]}
-              >
-                {day.label}
-              </Text>
-            </View>
-            {/* Only today carries the underline, so the current column reads
-                even at a glance. */}
-            <View style={[styles.dayMarker, day.isToday && styles.dayMarkerToday]} />
+            <DayBox day={day} />
           </View>
         ))}
       </View>
@@ -770,7 +805,7 @@ function InsightCarousel({
             >
               <View style={styles.insightHeader}>
                 <Text style={styles.insightTitle}>{card.title}</Text>
-                <ChevronRight color="#A5A0D8" size={15} strokeWidth={2} />
+                <ChevronRight color={TEXT_FAINT} size={15} strokeWidth={2} />
               </View>
               <Text style={styles.insightText}>{card.text}</Text>
             </PressableScale>
@@ -933,16 +968,9 @@ export default function DashboardScreen({ navigation }: any) {
   const showSkeleton = loading && !snapshot;
 
   return (
+    // Flat near-black page. The card stack does the work that the old wash did;
+    // a gradient behind solid cards only ever fights them.
     <View style={styles.root}>
-      {/* Same indigo→black wash as the sign-in screen, so Home reads as the
-          same product rather than a different app. */}
-      <LinearGradient
-        colors={BACKDROP}
-        start={{ x: 0.2, y: 0.1 }}
-        end={{ x: 0.8, y: 0.8 }}
-        style={StyleSheet.absoluteFill}
-      />
-
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           style={styles.container}
@@ -1003,7 +1031,7 @@ export default function DashboardScreen({ navigation }: any) {
           {/* This week */}
           <Animated.View entering={enter(2)}>
             {showSkeleton ? (
-              <Skeleton width="100%" height={132} borderRadius={RADIUS} style={{ marginBottom: GAP }} />
+              <Skeleton width="100%" height={124} borderRadius={RADIUS} style={{ marginBottom: GAP }} />
             ) : (
               <WeekStrip
                 week={snapshot?.week ?? []}
@@ -1039,14 +1067,14 @@ export default function DashboardScreen({ navigation }: any) {
                         <>
                           <View style={styles.scoreMetaDivider} />
                           {snapshot.readinessDelta > 0 ? (
-                            <TrendingUp color="#3FE8A6" size={12} strokeWidth={2.2} />
+                            <TrendingUp color={POSITIVE} size={12} strokeWidth={2.2} />
                           ) : (
-                            <TrendingDown color="#F87171" size={12} strokeWidth={2.2} />
+                            <TrendingDown color={NEGATIVE} size={12} strokeWidth={2.2} />
                           )}
                           <Text
                             style={[
                               styles.scoreMetaText,
-                              { color: snapshot.readinessDelta > 0 ? '#3FE8A6' : '#F87171' },
+                              { color: snapshot.readinessDelta > 0 ? POSITIVE : NEGATIVE },
                             ]}
                           >
                             {Math.abs(snapshot.readinessDelta)} this week
@@ -1062,9 +1090,12 @@ export default function DashboardScreen({ navigation }: any) {
                   </ScoreRing>
                 </View>
 
-                <PressableScale
+                {/* The label stays short: a chapter name here would grow the
+                    button past the card on the long ones. */}
+                <GradientButton
+                  label={resumeTarget ? 'Resume practice' : 'Start practising'}
+                  icon={<ArrowRight color="#FFFFFF" size={16} strokeWidth={2.4} />}
                   onPress={onPrimaryCta}
-                  scaleTo={0.97}
                   style={styles.scoreCta}
                   accessibilityLabel={
                     resumeTarget
@@ -1074,14 +1105,7 @@ export default function DashboardScreen({ navigation }: any) {
                   accessibilityHint={
                     resumeTarget ? 'Starts a session straight away' : 'Opens your chapters'
                   }
-                >
-                  {/* The label stays short: a chapter name here would grow the
-                      button past the card on the long ones. */}
-                  <Text style={styles.scoreCtaText}>
-                    {resumeTarget ? 'Resume practice' : 'Start practising'}
-                  </Text>
-                  <ArrowRight color="#0B0B0C" size={16} strokeWidth={2.4} />
-                </PressableScale>
+                />
               </View>
             )}
           </Animated.View>
@@ -1244,7 +1268,7 @@ export default function DashboardScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  root: { flex: 1, backgroundColor: BG },
   safeArea: { flex: 1 },
   container: { flex: 1 },
   content: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 48 },
@@ -1289,7 +1313,7 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE,
     borderRadius: RADIUS,
     borderWidth: 1,
-    borderColor: 'rgba(248,113,113,0.25)',
+    borderColor: NEGATIVE,
     padding: 18,
     marginBottom: GAP,
   },
@@ -1303,7 +1327,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: SURFACE_BORDER,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: SURFACE_SUBTLE,
   },
   retryText: { color: TEXT, fontSize: 13, fontFamily: typography.semiBold },
 
@@ -1325,26 +1349,22 @@ const styles = StyleSheet.create({
 
   weekRow: { flexDirection: 'row' },
   dayCell: { width: DAY_CELL_WIDTH, alignItems: 'center' },
+  // The ring the gradient is painted into. Present on every day so the cells
+  // stay identically sized whether or not they are today.
+  dayFrame: { width: DAY_CELL_WIDTH - 5, borderRadius: 12, padding: DAY_FRAME },
   dayInner: {
-    width: DAY_CELL_WIDTH - 5,
-    borderRadius: 12,
+    // One frame-width tighter, so the inner curve stays concentric with the
+    // outer one instead of leaving a bright wedge in each corner.
+    borderRadius: 12 - DAY_FRAME,
     paddingVertical: 9,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'transparent',
+    backgroundColor: SURFACE_SUBTLE,
   },
   dayInnerFuture: { backgroundColor: 'transparent' },
-  dayInnerToday: {
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderColor: 'rgba(255,255,255,0.28)',
-  },
+  dayInnerToday: { backgroundColor: SURFACE_STRONG },
   dayLabel: { color: TEXT_MUTED, fontSize: 11, fontFamily: typography.semiBold, marginTop: 7 },
   dayLabelFuture: { color: TEXT_FAINT, fontFamily: typography.regular },
   dayLabelToday: { color: TEXT },
-  // Always laid out so every column is the same height; only today is coloured.
-  dayMarker: { width: 16, height: 3, borderRadius: 1.5, marginTop: 6, backgroundColor: 'transparent' },
-  dayMarkerToday: { backgroundColor: MARK_DONE },
 
   glyphFilled: { backgroundColor: MARK_DONE, justifyContent: 'center', alignItems: 'center' },
   glyphHollow: { borderWidth: 3, justifyContent: 'center', alignItems: 'center' },
@@ -1365,7 +1385,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: SURFACE_SUBTLE,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1398,22 +1418,13 @@ const styles = StyleSheet.create({
   },
   scoreMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, flexWrap: 'wrap' },
   scoreMetaText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
-  scoreMetaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)', marginHorizontal: 2 },
+  scoreMetaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#3F3F46', marginHorizontal: 2 },
   ringCenter: { alignItems: 'center' },
   ringValue: { color: TEXT, fontSize: 30, fontFamily: typography.bold, letterSpacing: -1, lineHeight: 34 },
   ringSuffix: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular, marginTop: 1 },
-  scoreCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 8,
-    marginTop: 22,
-    height: 46,
-    paddingHorizontal: 22,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-  },
-  scoreCtaText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold, letterSpacing: -0.2 },
+  // Sizing, fill and radius all live in GradientButton; the card only says
+  // where the button sits.
+  scoreCta: { marginTop: 22 },
 
   track: { width: '100%', backgroundColor: TRACK, overflow: 'hidden' },
 
@@ -1431,9 +1442,10 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     minHeight: 132,
     borderRadius: RADIUS,
-    backgroundColor: 'rgba(120,113,220,0.10)',
+    // Same solid card as everything else; the accent lives in the eyebrow only.
+    backgroundColor: SURFACE,
     borderWidth: 1,
-    borderColor: 'rgba(140,133,235,0.18)',
+    borderColor: SURFACE_BORDER,
     paddingVertical: 24,
     paddingHorizontal: 22,
     justifyContent: 'center',
@@ -1445,7 +1457,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   insightTitle: {
-    color: '#A5A0D8',
+    color: '#A855F7',
     fontSize: 11,
     fontFamily: typography.semiBold,
     textTransform: 'uppercase',
@@ -1459,8 +1471,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   dots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 16 },
-  dotActive: { width: 16, height: 5, borderRadius: 2.5, backgroundColor: 'rgba(255,255,255,0.85)' },
-  dotInactive: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: 'rgba(255,255,255,0.20)' },
+  dotActive: { width: 16, height: 5, borderRadius: 2.5, backgroundColor: '#FFFFFF' },
+  dotInactive: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#3F3F46' },
 
   // Metric grid
   metricRow: { flexDirection: 'row', gap: GAP, marginBottom: 32 },
@@ -1500,7 +1512,7 @@ const styles = StyleSheet.create({
   chapterProgressValue: { color: TEXT, fontSize: 12, fontFamily: typography.semiBold },
   chapterStats: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14, flexWrap: 'wrap' },
   chapterStatText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
-  chapterStatDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
+  chapterStatDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#3F3F46' },
 
   // Empty states
   emptyCard: {
@@ -1515,7 +1527,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: SURFACE_SUBTLE,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 14,
