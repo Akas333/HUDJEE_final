@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Image,
   Animated as RNAnimated,
-  Dimensions,
   RefreshControl,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -29,31 +28,22 @@ import {
 } from 'lucide-react-native';
 
 import Skeleton from '../components/Skeleton';
+import ProgressBar from '../components/GradientProgressBar';
 import { useHomeStore } from '../store/homeStore';
 import { ContinueChapter, HomeInsight } from '../services/homeApi';
-
-const { width } = Dimensions.get('window');
-
-// ─── layout scale ────────────────────────────────────────────────────────────
-const GUTTER = 20;
-const GAP = 12;
-const CARD_WIDTH = width - GUTTER * 2;
-const RADIUS = 20;
-
-const SURFACE = '#141416';
-const SURFACE_BORDER = '#232326';
-const TRACK = '#26262A';
-const TEXT = '#FFFFFF';
-const TEXT_MUTED = '#9CA3AF';
-const TEXT_FAINT = '#6B7280';
-
-const GRADIENT: [string, string] = ['#69EAC0', '#40C9FF'];
-
-const SUBJECT_COLORS: Record<string, string> = {
-  physics: '#60A5FA',
-  chemistry: '#F59E0B',
-  maths: '#A78BFA',
-};
+import {
+  CARD_WIDTH,
+  GAP,
+  GUTTER,
+  RADIUS,
+  SUBJECT_COLORS,
+  SURFACE,
+  SURFACE_BORDER,
+  SURFACE_INSET,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+} from '../theme/home';
 
 // ─── small helpers ───────────────────────────────────────────────────────────
 
@@ -82,38 +72,6 @@ function relativeDay(iso: string | null): string {
 }
 
 // ─── shared pieces ───────────────────────────────────────────────────────────
-
-function ProgressBar({ value, height = 8 }: { value: number; height?: number }) {
-  const anim = useRef(new RNAnimated.Value(0)).current;
-
-  useEffect(() => {
-    RNAnimated.timing(anim, {
-      toValue: Math.max(0, Math.min(100, value)),
-      duration: 700,
-      // Width is not a transform, so this one has to run on the JS driver.
-      useNativeDriver: false,
-    }).start();
-  }, [value]);
-
-  const barWidth = anim.interpolate({
-    inputRange: [0, 100],
-    outputRange: ['0%', '100%'],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <View style={[styles.track, { height, borderRadius: height / 2 }]}>
-      <RNAnimated.View style={{ width: barWidth, height: '100%' }}>
-        <LinearGradient
-          colors={GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={{ flex: 1, borderRadius: height / 2 }}
-        />
-      </RNAnimated.View>
-    </View>
-  );
-}
 
 function SectionHeader({ title, actionLabel, onAction }: { title: string; actionLabel?: string; onAction?: () => void }) {
   return (
@@ -605,8 +563,6 @@ const styles = StyleSheet.create({
   deltaPillDown: { backgroundColor: 'rgba(248, 113, 113, 0.12)' },
   deltaText: { fontSize: 11, fontWeight: '700' },
 
-  track: { width: '100%', backgroundColor: TRACK, overflow: 'hidden' },
-
   // Today strip
   statRow: { flexDirection: 'row', gap: GAP, marginBottom: 28 },
   statChip: {
@@ -625,7 +581,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: '#1D1D21',
+    backgroundColor: SURFACE_INSET,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -725,7 +681,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: '#1D1D21',
+    backgroundColor: SURFACE_INSET,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
