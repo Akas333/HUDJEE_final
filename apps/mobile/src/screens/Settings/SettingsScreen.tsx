@@ -21,7 +21,7 @@ import { signOut } from '../../lib/googleAuth';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../services/ToastService';
 import { typography } from '../../theme/typography';
-import { enter, GRADIENT, PROFILE_TINT, TEXT, TEXT_FAINT, TEXT_MUTED } from '../../theme/ui';
+import { enter, ACCENT, PROFILE_TINT, TEXT, TEXT_FAINT, TEXT_MUTED } from '../../theme/ui';
 
 // Settings is the quietest screen in the app and should look it: the same
 // gutter, wash and card system as every tab, with the colour turned almost all
@@ -162,13 +162,13 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: `${GRADIENT[0]}1F`,
+    backgroundColor: `${ACCENT}1F`,
     borderWidth: 1,
-    borderColor: `${GRADIENT[0]}3D`,
+    borderColor: `${ACCENT}3D`,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: { color: GRADIENT[0], fontSize: 20, fontFamily: typography.bold },
+  avatarText: { color: ACCENT, fontSize: 20, fontFamily: typography.bold },
   identityText: { flex: 1, gap: 3 },
   identityName: { color: TEXT, fontSize: 15, fontFamily: typography.semiBold },
   identityMeta: { color: TEXT_FAINT, fontSize: 12, fontFamily: typography.regular },

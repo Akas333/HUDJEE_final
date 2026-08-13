@@ -8,7 +8,7 @@ import SettingsChoice from '../../components/settings/SettingsChoice';
 import SettingsGroup from '../../components/settings/SettingsGroup';
 import SettingsToggle from '../../components/settings/SettingsToggle';
 import { useSettingsStore } from '../../store/settingsStore';
-import { GRADIENT, POSITIVE, PROFILE_TINT } from '../../theme/ui';
+import { PROFILE_TINT } from '../../theme/ui';
 
 const SESSION_LENGTHS = [10, 20, 30] as const;
 
@@ -28,7 +28,6 @@ export function PracticePreferencesScreen() {
       <SettingsGroup label="Feedback" index={0}>
         <SettingsToggle
           icon={Volume2}
-          accent={GRADIENT[1]}
           title="Sound effects"
           subtitle="The tick on a correct answer, and the one that is not"
           value={practicePrefs.sound}
@@ -36,7 +35,6 @@ export function PracticePreferencesScreen() {
         />
         <SettingsToggle
           icon={Vibrate}
-          accent={GRADIENT[0]}
           title="Haptics"
           subtitle="A tap under every control you press"
           value={practicePrefs.haptics}
@@ -51,7 +49,6 @@ export function PracticePreferencesScreen() {
       >
         <SettingsToggle
           icon={Accessibility}
-          accent={POSITIVE}
           title="Reduce motion"
           subtitle="Cut the entrance animations and card springs"
           value={practicePrefs.reduceMotion}
@@ -71,7 +68,6 @@ export function PracticePreferencesScreen() {
           value={practicePrefs.defaultSessionLength as (typeof SESSION_LENGTHS)[number]}
           onChange={(next) => updatePracticePref('defaultSessionLength', next)}
           format={(minutes) => `${minutes} min`}
-          accent={GRADIENT[0]}
         />
       </SettingsGroup>
     </Screen>

@@ -1,8 +1,6 @@
 import { Dimensions } from 'react-native';
 import { FadeInDown } from 'react-native-reanimated';
 
-import { colors } from './colors';
-
 // The one place the app's visual system is defined.
 //
 // Home, Practice, Arena and Challenges each grew their own copy of these
@@ -10,6 +8,11 @@ import { colors } from './colors';
 // hand. `theme/arena.ts` and `theme/challenges.ts` now re-export from here, so
 // the tabs cannot drift apart by a point or a shade — and Profile and Settings,
 // which never had tokens of their own, get the same ones for free.
+//
+// The values are Home's. Home was rebuilt first and then the rest of the app was
+// brought to it, so what is written here is what shipped and was looked at on a
+// device — not a palette agreed in the abstract and then argued with screen by
+// screen.
 
 const { width } = Dimensions.get('window');
 
@@ -24,31 +27,66 @@ export const RADIUS = 18;
 export const RADIUS_INNER = 12;
 
 // ─── surfaces ────────────────────────────────────────────────────────────────
-// Solid, and a step *lighter* than the base the app sits on. Translucent cards
-// read as washed out over the bright top of the tinted wash and, worse, come out
-// darker than the page lower down, so a stack of them sinks into the background
-// instead of sitting on it. The tint still carries the screen: it runs behind
-// the header and in every gutter and gap.
+// Solid, in three steps: the page, a card on it, a row nested in that card.
+// Translucent surfaces were tried first and abandoned — over a wash they come
+// out lighter at the top of the screen than the bottom, so a stack of cards
+// appears to tilt, and a card nested in a card doubles its own alpha and turns
+// muddy. Solid values hold their weight anywhere on the page.
 
-export const SURFACE = '#17171D';
-export const SURFACE_STRONG = '#26262F';
-export const SURFACE_BORDER = '#2C2C37';
-export const TRACK = '#26262E';
-export const DIVIDER = '#333340';
+/** The page. Near-black, and flat — Home carries no wash behind it. */
+export const BG = '#0A0A0C';
+/** Cards sit one step off the page… */
+export const SURFACE = '#131317';
+/** …and anything nested inside a card sits one step off the card. */
+export const SURFACE_SUBTLE = '#1B1B20';
+export const SURFACE_STRONG = '#232329';
+export const SURFACE_BORDER = '#26262C';
+export const TRACK = '#26262C';
+export const DIVIDER = '#26262C';
+/**
+ * The 3pt dot that separates two bits of meta inside a card, and the hairline
+ * on an active control. One step brighter than a border on purpose: at 3pt a
+ * border-weight grey is not there at all.
+ */
+export const DOT = '#3F3F46';
 
-/** The hairline disc every back button and header affordance is drawn in. */
-export const GLASS = 'rgba(255,255,255,0.05)';
-export const GLASS_BORDER = 'rgba(255,255,255,0.09)';
+/**
+ * The disc every back button and header affordance is drawn in. Solid, like
+ * everything else — it used to be a 5% white film, which is invisible on a
+ * black page and too bright the moment anything sits behind it.
+ */
+export const GLASS = SURFACE_SUBTLE;
+export const GLASS_BORDER = SURFACE_BORDER;
 
 // ─── text ────────────────────────────────────────────────────────────────────
+// Three steps only. A fourth was tried and the two middle greys were
+// indistinguishable at 11pt on a phone in daylight.
 
-export const TEXT = colors.hudjeeTextPrimary;
-export const TEXT_MUTED = colors.hudjeeTextSecondary;
-export const TEXT_FAINT = colors.hudjeeTextTertiary;
+export const TEXT = '#FFFFFF';
+export const TEXT_MUTED = '#9CA3AF';
+export const TEXT_FAINT = '#6B7280';
+
+/**
+ * Ink for text and icons sitting on a light fill — the solid CTAs, a selected
+ * option badge. It is the page colour rather than pure black, so the label
+ * reads as the page showing through the button rather than as a second, darker
+ * shade the palette does not otherwise contain.
+ */
+export const ON_LIGHT = BG;
 
 // ─── accents ─────────────────────────────────────────────────────────────────
 
-export const GRADIENT: [string, string] = ['#69EAC0', '#40C9FF'];
+/**
+ * The accent, which is not a colour: it is white.
+ *
+ * Progress bars, arcs, meters, badges and every small mark are filled with
+ * this. The app had a sky-blue accent, then a subject colour per screen, then
+ * both at once, and the result was that nothing on a screen was emphasised
+ * because five things always were. Emphasis is brightness here — white against
+ * three greys — and hue is spent on two things only: the gradient a button is
+ * outlined in, and whether an answer was right or wrong.
+ */
+export const ACCENT = '#FFFFFF';
 
 /**
  * The ramp the primary button is *outlined* in — indigo on the left, unlit
@@ -58,24 +96,22 @@ export const GRADIENT: [string, string] = ['#69EAC0', '#40C9FF'];
  * shape with it.
  */
 export const ACCENT_GRADIENT: [string, string, string] = ['#6D5DF6', '#4A4A63', '#C99A6B'];
-export const POSITIVE = '#3FE8A6';
-export const NEGATIVE = '#F87171';
+export const POSITIVE = '#22C55E';
+export const NEGATIVE = '#EF4444';
 export const CAUTION = '#F0B65C';
 export const GOLD = '#E3B24C';
 
 // ─── tints ───────────────────────────────────────────────────────────────────
-// Each area of the app wears one colour in its backdrop wash, so a student can
-// tell where they are from the corner of their eye. Practice takes the subject's
-// colour; the rest are fixed.
+// Each area of the app used to wear its own colour, first as a full-bleed wash
+// and then as the accent on its marks. They are all white now — kept as named
+// constants because every screen still declares which area it belongs to, and
+// because putting colour back is then one line per area rather than a search.
 
-/** Profile and Settings: the quietest wash in the app, on purpose. These are
- *  chrome, not content — a saturated tint here would compete with the tab the
- *  student actually came from. */
-export const PROFILE_TINT = '#5A5F86';
+/** Profile and Settings. */
+export const PROFILE_TINT = '#FFFFFF';
 
-/** Tests and everything downstream of one. A paper spans all three subjects, so
- *  it cannot borrow a subject's colour; this is the sober blue that says exam. */
-export const TEST_TINT = '#3E6B8F';
+/** Tests and everything downstream of one. */
+export const TEST_TINT = '#FFFFFF';
 
 // ─── motion ──────────────────────────────────────────────────────────────────
 

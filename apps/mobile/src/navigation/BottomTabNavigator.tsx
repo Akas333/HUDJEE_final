@@ -6,6 +6,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
+import { SURFACE_BORDER, SURFACE_STRONG } from '../theme/ui';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,12 +19,13 @@ import ProfileNavigator from './ProfileNavigator';
 
 const Tab = createBottomTabNavigator();
 
-// The active tab reads as the same glass surface the cards use, with a plain
-// white icon and label. The screens behind it change colour with the subject, so
-// a tinted tab bar would fight whatever wash is on screen.
+// The active tab is the same raised surface the cards use, with a plain white
+// icon and label. Solid rather than a white film: the bar sits over whatever
+// the screen has scrolled to, and a translucent pill changed shade as content
+// passed underneath it.
 const ACTIVE_TINT = '#FFFFFF';
-const ACTIVE_SURFACE = 'rgba(255,255,255,0.10)';
-const ACTIVE_BORDER = 'rgba(255,255,255,0.14)';
+const ACTIVE_SURFACE = SURFACE_STRONG;
+const ACTIVE_BORDER = SURFACE_BORDER;
 
 const HomeIcon = ({ color, size, strokeWidth }: { color: string; size: number; strokeWidth: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">

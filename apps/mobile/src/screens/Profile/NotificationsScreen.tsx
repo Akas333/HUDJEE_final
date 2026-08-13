@@ -5,7 +5,7 @@ import Animated from 'react-native-reanimated';
 import Screen from '../../components/ui/Screen';
 import ScreenHeader from '../../components/ui/ScreenHeader';
 import EmptyState from '../../components/ui/EmptyState';
-import { enter, GRADIENT, PROFILE_TINT } from '../../theme/ui';
+import { enter, PROFILE_TINT } from '../../theme/ui';
 import SettingsGroup from '../../components/settings/SettingsGroup';
 import SettingsRow from '../../components/settings/SettingsRow';
 
@@ -29,7 +29,6 @@ export default function NotificationsScreen({ navigation }: any) {
           icon={BellOff}
           title="Nothing waiting"
           body="You are up to date. Anything that needs you — a challenge you have not answered, a streak about to lapse — shows up here first."
-          accent={GRADIENT[1]}
         />
       </Animated.View>
 

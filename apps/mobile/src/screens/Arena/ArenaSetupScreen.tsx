@@ -23,6 +23,7 @@ import {
 } from 'lucide-react-native';
 
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import Skeleton from '../../components/Skeleton';
 import { colors } from '../../theme/colors';
@@ -42,6 +43,8 @@ import {
   GAP,
   GUTTER,
   MODE_BY_ID,
+  NEGATIVE,
+  ON_LIGHT,
   RADIUS,
   SECTION_GAP,
   SUBJECT_LABELS,
@@ -50,6 +53,7 @@ import {
   SURFACE,
   SURFACE_BORDER,
   SURFACE_STRONG,
+  SURFACE_SUBTLE,
   TARGET_PRESETS,
   TEXT,
   TEXT_FAINT,
@@ -599,7 +603,7 @@ export default function ArenaSetupScreen({ navigation, route }: any) {
                   value={perSubjectTargets}
                   onValueChange={onTogglePerSubject}
                   trackColor={{ false: SURFACE_STRONG, true: `${mode.accent}88` }}
-                  thumbColor={perSubjectTargets ? mode.accent : '#8B8B93'}
+                  thumbColor={perSubjectTargets ? mode.accent : TEXT_MUTED}
                 />
               </View>
 
@@ -700,7 +704,7 @@ export default function ArenaSetupScreen({ navigation, route }: any) {
                       value={customStart}
                       onValueChange={onToggleCustomStart}
                       trackColor={{ false: SURFACE_STRONG, true: `${mode.accent}88` }}
-                      thumbColor={customStart ? mode.accent : '#8B8B93'}
+                      thumbColor={customStart ? mode.accent : TEXT_MUTED}
                     />
                   </View>
                 </>
@@ -732,26 +736,16 @@ export default function ArenaSetupScreen({ navigation, route }: any) {
 
         {/* Start bar */}
         <View style={styles.footer}>
-          <PressableScale
+          <GradientButton
+            label={canStart ? `Start ${mode.name}` : 'Pick a chapter to start'}
+            icon={canStart ? <Play color="#FFFFFF" size={16} fill="#FFFFFF" /> : undefined}
             onPress={onStart}
             disabled={!canStart}
-            scaleTo={0.97}
-            style={[
-              styles.startButton,
-              { backgroundColor: canStart ? mode.accent : SURFACE_STRONG },
-            ]}
-          >
-            {starting ? (
-              <ActivityIndicator color="#0B0B0C" />
-            ) : (
-              <>
-                <Text style={[styles.startText, { color: canStart ? '#0B0B0C' : TEXT_FAINT }]}>
-                  {canStart ? `Start ${mode.name}` : 'Pick a chapter to start'}
-                </Text>
-                {canStart && <Play color="#0B0B0C" size={16} fill="#0B0B0C" />}
-              </>
-            )}
-          </PressableScale>
+            loading={starting}
+            height={52}
+            radius={999}
+            block
+          />
         </View>
       </SafeAreaView>
     </View>
@@ -870,7 +864,7 @@ const styles = StyleSheet.create({
   },
   customUnit: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
   hint: { color: TEXT_FAINT, fontSize: 12, fontFamily: typography.regular, marginTop: 12, lineHeight: 18 },
-  errorText: { color: '#F87171', fontSize: 12, fontFamily: typography.regular, marginTop: 12 },
+  errorText: { color: NEGATIVE, fontSize: 12, fontFamily: typography.regular, marginTop: 12 },
 
   toggleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 18 },
   toggleTitle: { color: TEXT, fontSize: 14, fontFamily: typography.semiBold },
@@ -946,7 +940,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: SURFACE_SUBTLE,
     justifyContent: 'center',
     alignItems: 'center',
   },

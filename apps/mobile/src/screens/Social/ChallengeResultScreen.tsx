@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { RefreshCw, Share2 } from 'lucide-react-native';
 
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import Avatar from '../../components/challenges/Avatar';
 import ChallengeHeader from '../../components/challenges/ChallengeHeader';
@@ -18,13 +19,16 @@ import { SUBJECT_COLORS } from '../../theme/subjects';
 import {
   CHALLENGE_TINT,
   DIVIDER,
+  DOT,
   GAP,
   GUTTER,
   LOSS,
+  ON_LIGHT,
   RADIUS,
   SECTION_GAP,
   SURFACE,
   SURFACE_BORDER,
+  SURFACE_SUBTLE,
   TEXT,
   TEXT_FAINT,
   TEXT_MUTED,
@@ -196,9 +200,13 @@ export default function ChallengeResultScreen({ navigation, route }: any) {
           </ScrollView>
 
           <View style={styles.footer}>
-            <PressableScale onPress={goHome} scaleTo={0.97} style={styles.primaryButtonWide}>
-              <Text style={styles.primaryText}>Back to Challenges</Text>
-            </PressableScale>
+            <GradientButton
+              label="Back to Challenges"
+              onPress={goHome}
+              height={50}
+              radius={999}
+              style={styles.primaryButtonWide}
+            />
           </View>
         </SafeAreaView>
       </View>
@@ -325,10 +333,15 @@ export default function ChallengeResultScreen({ navigation, route }: any) {
             <Share2 color={TEXT} size={16} strokeWidth={2.2} />
             <Text style={styles.secondaryText}>Share</Text>
           </PressableScale>
-          <PressableScale onPress={rematch} scaleTo={0.97} style={styles.primaryButton}>
-            <RefreshCw color="#0B0B0C" size={15} strokeWidth={2.4} />
-            <Text style={styles.primaryText}>Rematch</Text>
-          </PressableScale>
+          <GradientButton
+            label="Rematch"
+            icon={<RefreshCw color="#FFFFFF" size={15} strokeWidth={2.4} />}
+            iconSide="leading"
+            onPress={rematch}
+            height={50}
+            radius={999}
+            style={styles.primaryButton}
+          />
         </View>
       </SafeAreaView>
     </View>
@@ -416,10 +429,10 @@ const styles = StyleSheet.create({
   soloValue: { color: TEXT, fontSize: 24, fontFamily: typography.bold, letterSpacing: -0.6, marginTop: 10 },
   soloMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   soloMeta: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
-  metaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
+  metaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: DOT },
 
   noteCard: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: SURFACE_SUBTLE,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: SURFACE_BORDER,
@@ -451,22 +464,6 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE,
   },
   secondaryText: { color: TEXT, fontSize: 14, fontFamily: typography.semiBold },
-  primaryButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    borderRadius: 999,
-    backgroundColor: '#F5F5F7',
-  },
-  primaryButtonWide: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderRadius: 999,
-    backgroundColor: '#F5F5F7',
-  },
-  primaryText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
+  primaryButton: { flex: 1.2 },
+  primaryButtonWide: { flex: 1 },
 });

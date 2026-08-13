@@ -7,7 +7,6 @@ import {
   Image,
   Animated as RNAnimated,
   Easing as RNEasing,
-  Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
 } from 'react-native';
@@ -35,7 +34,25 @@ import PressableScale from '../components/PressableScale';
 import GradientButton from '../components/ui/GradientButton';
 import { HapticService } from '../services/HapticService';
 import { typography } from '../theme/typography';
-import { ACCENT_GRADIENT } from '../theme/ui';
+import {
+  ACCENT,
+  ACCENT_GRADIENT,
+  BG,
+  CARD_WIDTH,
+  GAP,
+  GUTTER,
+  NEGATIVE,
+  POSITIVE,
+  RADIUS,
+  SURFACE,
+  SURFACE_BORDER,
+  SURFACE_STRONG,
+  SURFACE_SUBTLE,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  TRACK,
+} from '../theme/ui';
 import { subjectKeyOf } from '../theme/subjects';
 import { useHomeStore } from '../store/homeStore';
 import { useSubjectStore } from '../store/subjectStore';
@@ -48,50 +65,24 @@ import {
   DAILY_GOAL_MINUTES,
 } from '../services/homeApi';
 
-const { width } = Dimensions.get('window');
-
 // ─── design tokens ───────────────────────────────────────────────────────────
-// Flat dark system: a pure-black page, solid lifted cards, solid hairline
+// Flat dark system: a near-black page, solid lifted cards, solid hairline
 // borders, and one saturated accent. Nothing on this screen is translucent,
-// gradient-filled or glossy — depth comes from the step between #0A0A0C,
-// #131317 and #1B1B20 alone, so a card reads the same wherever it lands in the
-// scroll instead of picking up whatever is behind it.
-
-const GUTTER = 24;
-const GAP = 12;
-const CARD_WIDTH = width - GUTTER * 2;
-const RADIUS = 18;
+// gradient-filled or glossy — depth comes from the step between BG, SURFACE and
+// SURFACE_SUBTLE alone, so a card reads the same wherever it lands in the scroll
+// instead of picking up whatever is behind it.
+//
+// These were Home's own constants until the rest of the app was brought onto
+// them; they now live in `theme/ui` and Home imports them like everyone else.
 
 // Carousel slides are one gap wider than the card they hold, so two cards never
 // touch mid-swipe. Snapping is on this interval rather than `pagingEnabled`,
 // which can only ever page by the viewport width.
 const SLIDE_WIDTH = CARD_WIDTH + GAP;
 
-/** The page. Near-black, no wash behind it. */
-const BG = '#0A0A0C';
-/** Cards sit one step off the page… */
-const SURFACE = '#131317';
-/** …and anything nested inside a card sits one step off the card. */
-const SURFACE_SUBTLE = '#1B1B20';
-const SURFACE_STRONG = '#232329';
-const SURFACE_BORDER = '#26262C';
-const TRACK = '#26262C';
-
-const TEXT = '#FFFFFF';
-const TEXT_MUTED = '#9CA3AF';
-const TEXT_FAINT = '#6B7280';
-
-/** The one accent. Bars and arcs are filled flat with it — no gradient stops. */
-const ACCENT = '#38BDF8';
-
-const POSITIVE = '#22C55E';
-const NEGATIVE = '#EF4444';
-
-const SUBJECT_COLORS: Record<string, string> = {
-  physics: '#38BDF8',
-  chemistry: '#22C55E',
-  maths: '#A855F7',
-};
+/** The dot beside a chapter's subject. White like every other mark — the word
+ *  "PHYSICS" is right next to it, so the dot was only ever repeating it. */
+const SUBJECT_DOT = '#FFFFFF';
 
 // Material's fast-out-slow-in. Nothing on this screen moves linearly.
 const RN_FAST_OUT_SLOW_IN = RNEasing.bezier(0.4, 0, 0.2, 1);
@@ -121,10 +112,9 @@ function minutesParts(mins: number): { value: string; unit: string } {
 }
 
 // ─── monochrome marks ────────────────────────────────────────────────────────
-// The goal strip and the stat cards say how you are doing with brightness
-// rather than hue: white for done, fading to grey for not. Colour is spent on
-// the readiness ring and the subject accents, so these read as structure.
-// Declared here because `BAND_COLORS` below is built from them at module load.
+// The goal strip says how you are doing with brightness rather than hue: white
+// for done, fading to grey for not. Colour is spent on the readiness ring and
+// the subject accents, so these read as structure.
 
 const MARK_DONE = '#FFFFFF';
 const MARK_TODAY = '#E5E7EB';
@@ -133,43 +123,31 @@ const MARK_MISSED = '#4B5563';
 const MARK_FUTURE = '#2A2A30';
 
 // ─── qualitative bands ───────────────────────────────────────────────────────
-// Each stat card carries a mark saying whether its number is any good. These
-// thresholds are presentation only — the underlying values are unchanged.
-// Monochrome like the goal strip: brightness carries the verdict.
+// Each stat card carries a verdict on whether its number is any good. It is not
+// drawn — sighted users read the number itself — but it goes into the card's
+// accessibility label, where "0 days" on its own says nothing about whether the
+// student is on track. These thresholds are presentation only; the underlying
+// values are unchanged.
 
-type Tone = 'good' | 'ok' | 'idle';
-interface Band {
-  label: string;
-  tone: Tone;
+function streakBand(days: number): string {
+  if (days >= 7) return 'Strong';
+  if (days >= 3) return 'Good';
+  if (days >= 1) return 'Building';
+  return 'Start today';
 }
 
-const BAND_COLORS: Record<Tone, string> = {
-  good: MARK_DONE,
-  ok: MARK_PARTIAL,
-  // Same weight as a missed day in the strip: present, but not asking for
-  // attention. The grey used for future days disappears entirely at this size.
-  idle: MARK_MISSED,
-};
-
-function streakBand(days: number): Band {
-  if (days >= 7) return { label: 'Strong', tone: 'good' };
-  if (days >= 3) return { label: 'Good', tone: 'good' };
-  if (days >= 1) return { label: 'Building', tone: 'ok' };
-  return { label: 'Start today', tone: 'idle' };
+function solvedBand(count: number): string {
+  if (count >= 25) return 'Excellent';
+  if (count >= 10) return 'Good';
+  if (count >= 1) return 'Warming up';
+  return 'None yet';
 }
 
-function solvedBand(count: number): Band {
-  if (count >= 25) return { label: 'Excellent', tone: 'good' };
-  if (count >= 10) return { label: 'Good', tone: 'good' };
-  if (count >= 1) return { label: 'Warming up', tone: 'ok' };
-  return { label: 'None yet', tone: 'idle' };
-}
-
-function timeBand(mins: number): Band {
-  if (mins >= 45) return { label: 'Deep work', tone: 'good' };
-  if (mins >= 15) return { label: 'Good', tone: 'good' };
-  if (mins >= 1) return { label: 'Short', tone: 'ok' };
-  return { label: 'None yet', tone: 'idle' };
+function timeBand(mins: number): string {
+  if (mins >= 45) return 'Deep work';
+  if (mins >= 15) return 'Good';
+  if (mins >= 1) return 'Short';
+  return 'None yet';
 }
 
 /** The line under the score. Says what the number means, in one breath. */
@@ -313,25 +291,20 @@ function SectionHeader({
   );
 }
 
-const AnimatedCircle = RNAnimated.createAnimatedComponent(Circle);
+/** Ten cells, so each one is worth a round ten points and can be counted. */
+const METER_SEGMENTS = 10;
+const METER_SPAN = 100 / METER_SEGMENTS;
 
 /**
- * The readiness gauge. Sweeps from 12 o'clock and holds the score itself, so the
- * number and the arc that describes it are the same object.
+ * The readiness meter: ten cells that fill left to right, rather than one
+ * continuous sweep. Discrete cells give the score a scale to be read against —
+ * "three of ten" lands without decoding an arc — and they repeat the rhythm of
+ * the week strip above, so the card belongs to the same screen.
+ *
+ * The boundary cell fills part-way rather than snapping, so the number and the
+ * meter never disagree: 34 must not read as 30.
  */
-function ScoreRing({
-  value,
-  size = 116,
-  stroke = 10,
-  children,
-}: {
-  value: number;
-  size?: number;
-  stroke?: number;
-  children?: React.ReactNode;
-}) {
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
+function SegmentedMeter({ value, height = 10 }: { value: number; height?: number }) {
   const anim = useRef(new RNAnimated.Value(0)).current;
 
   useEffect(() => {
@@ -340,37 +313,35 @@ function ScoreRing({
       duration: 900,
       delay: 150,
       easing: RN_FAST_OUT_SLOW_IN,
-      // strokeDashoffset is an SVG prop, not a transform — no native driver.
+      // Width is not a transform, so this one cannot use the native driver.
       useNativeDriver: false,
     }).start();
   }, [value]);
 
-  const dashOffset = anim.interpolate({
-    inputRange: [0, 100],
-    outputRange: [circumference, 0],
-    extrapolate: 'clamp',
-  });
-
   return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Circle cx={size / 2} cy={size / 2} r={radius} stroke={TRACK} strokeWidth={stroke} fill="none" />
-        <AnimatedCircle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={ACCENT}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          // Start the sweep at the top rather than at 3 o'clock.
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
-
-      <View style={styles.ringCenter}>{children}</View>
+    // Decorative: the score beside it is the accessible value, and ten
+    // unlabelled cells announced one by one would bury it.
+    <View
+      style={styles.meterRow}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      {Array.from({ length: METER_SEGMENTS }, (_, i) => (
+        <View key={i} style={[styles.meterCell, { height, borderRadius: height / 2 }]}>
+          <RNAnimated.View
+            style={{
+              height: '100%',
+              borderRadius: height / 2,
+              backgroundColor: ACCENT,
+              width: anim.interpolate({
+                inputRange: [i * METER_SPAN, (i + 1) * METER_SPAN],
+                outputRange: ['0%', '100%'],
+                extrapolate: 'clamp',
+              }),
+            }}
+          />
+        </View>
+      ))}
     </View>
   );
 }
@@ -572,7 +543,7 @@ function StatCard({
   value: string;
   unit: string;
   label: string;
-  band: Band;
+  band: string;
   onPress: () => void;
   hint: string;
 }) {
@@ -581,14 +552,11 @@ function StatCard({
       onPress={onPress}
       style={styles.statCard}
       scaleTo={0.95}
-      accessibilityLabel={`${label}: ${value} ${unit}. ${band.label}.`}
+      accessibilityLabel={`${label}: ${value} ${unit}. ${band}.`}
       accessibilityHint={hint}
     >
       <View style={styles.statCardTop}>
         <View style={styles.statCardIcon}>{icon}</View>
-        {/* The reference puts an overflow menu here; a tone dot fills the same
-            slot with something that actually says how you are doing. */}
-        <View style={[styles.statCardDot, { backgroundColor: BAND_COLORS[band.tone] }]} />
       </View>
       <View style={styles.statCardValueRow}>
         <Text style={styles.statCardValue} numberOfLines={1}>
@@ -658,7 +626,7 @@ function ChapterCard({
   onPress: () => void;
   onLongPress: () => void;
 }) {
-  const accent = SUBJECT_COLORS[chapter.subject] || TEXT_MUTED;
+  const accent = SUBJECT_DOT;
 
   return (
     <PressableScale
@@ -1046,48 +1014,50 @@ export default function DashboardScreen({ navigation }: any) {
               the gauge that describes it. */}
           <Animated.View entering={enter(3)}>
             {showSkeleton ? (
-              <Skeleton width="100%" height={244} borderRadius={RADIUS} style={{ marginBottom: GAP }} />
+              // Tracks the real card: 44 padding + 26 title + 46 caption
+              // + 64 score + 22 meter + 26 meta + 68 button.
+              <Skeleton width="100%" height={296} borderRadius={RADIUS} style={{ marginBottom: GAP }} />
             ) : (
               <View style={styles.scoreCard}>
-                <View style={styles.scoreTop}>
-                  <View style={styles.scoreTextCol}>
-                    <Text style={styles.scoreTitle}>Readiness Score</Text>
-                    <Text style={styles.scoreCaption}>
-                      {scoreCaption(snapshot?.readinessScore ?? 0, snapshot?.hasActivity ?? false)}
-                    </Text>
+                <Text style={styles.scoreTitle}>Readiness Score</Text>
+                <Text style={styles.scoreCaption}>
+                  {scoreCaption(snapshot?.readinessScore ?? 0, snapshot?.hasActivity ?? false)}
+                </Text>
 
-                    <View style={styles.scoreMetaRow}>
-                      <Percent color={TEXT_FAINT} size={12} strokeWidth={2} />
-                      <Text style={styles.scoreMetaText}>
-                        {snapshot?.accuracyPct != null
-                          ? `${snapshot.accuracyPct}% accuracy`
-                          : 'No accuracy yet'}
+                {/* The number leads and the meter measures it, so the two sit
+                    together above the supporting line. */}
+                <View style={styles.scoreValueRow}>
+                  <CountUp value={snapshot?.readinessScore ?? 0} style={styles.scoreValue} />
+                  <Text style={styles.scoreValueSuffix}>/100</Text>
+                </View>
+
+                <SegmentedMeter value={snapshot?.readinessScore ?? 0} />
+
+                <View style={styles.scoreMetaRow}>
+                  <Percent color={TEXT_FAINT} size={12} strokeWidth={2} />
+                  <Text style={styles.scoreMetaText}>
+                    {snapshot?.accuracyPct != null
+                      ? `${snapshot.accuracyPct}% accuracy`
+                      : 'No accuracy yet'}
+                  </Text>
+                  {snapshot?.readinessDelta ? (
+                    <>
+                      <View style={styles.scoreMetaDivider} />
+                      {snapshot.readinessDelta > 0 ? (
+                        <TrendingUp color={TEXT_MUTED} size={12} strokeWidth={2.2} />
+                      ) : (
+                        <TrendingDown color={TEXT_MUTED} size={12} strokeWidth={2.2} />
+                      )}
+                      <Text
+                        style={[
+                          styles.scoreMetaText,
+                          { color: TEXT_MUTED },
+                        ]}
+                      >
+                        {Math.abs(snapshot.readinessDelta)} this week
                       </Text>
-                      {snapshot?.readinessDelta ? (
-                        <>
-                          <View style={styles.scoreMetaDivider} />
-                          {snapshot.readinessDelta > 0 ? (
-                            <TrendingUp color={POSITIVE} size={12} strokeWidth={2.2} />
-                          ) : (
-                            <TrendingDown color={NEGATIVE} size={12} strokeWidth={2.2} />
-                          )}
-                          <Text
-                            style={[
-                              styles.scoreMetaText,
-                              { color: snapshot.readinessDelta > 0 ? POSITIVE : NEGATIVE },
-                            ]}
-                          >
-                            {Math.abs(snapshot.readinessDelta)} this week
-                          </Text>
-                        </>
-                      ) : null}
-                    </View>
-                  </View>
-
-                  <ScoreRing value={snapshot?.readinessScore ?? 0}>
-                    <CountUp value={snapshot?.readinessScore ?? 0} style={styles.ringValue} />
-                    <Text style={styles.ringSuffix}>/100</Text>
-                  </ScoreRing>
+                    </>
+                  ) : null}
                 </View>
 
                 {/* The label stays short: a chapter name here would grow the
@@ -1380,7 +1350,7 @@ const styles = StyleSheet.create({
     borderColor: SURFACE_BORDER,
     padding: 14,
   },
-  statCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  statCardTop: { flexDirection: 'row', alignItems: 'flex-start' },
   statCardIcon: {
     width: 36,
     height: 36,
@@ -1390,7 +1360,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   // 6pt reads as a square once antialiasing has had its way with it.
-  statCardDot: { width: 8, height: 8, borderRadius: 4, marginTop: 3 },
   statCardValueRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 16 },
   statCardValue: { color: TEXT, fontSize: 19, fontFamily: typography.bold, letterSpacing: -0.5 },
   statCardUnit: { color: TEXT_MUTED, fontSize: 11, fontFamily: typography.regular, marginLeft: 3 },
@@ -1405,9 +1374,6 @@ const styles = StyleSheet.create({
     padding: 22,
     marginBottom: GAP,
   },
-  scoreTop: { flexDirection: 'row', alignItems: 'center' },
-  // The ring is a fixed 116pt, so the text column takes whatever is left.
-  scoreTextCol: { flex: 1, paddingRight: 16 },
   scoreTitle: { color: TEXT, fontSize: 22, fontFamily: typography.bold, letterSpacing: -0.5 },
   scoreCaption: {
     color: TEXT_MUTED,
@@ -1416,12 +1382,24 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 8,
   },
+  // The score now leads the card, at the size the ring's centre used to give it.
+  scoreValueRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 20 },
+  scoreValue: { color: TEXT, fontSize: 40, fontFamily: typography.bold, letterSpacing: -1.4, lineHeight: 44 },
+  scoreValueSuffix: {
+    color: TEXT_FAINT,
+    fontSize: 13,
+    fontFamily: typography.regular,
+    marginLeft: 4,
+  },
+
+  meterRow: { flexDirection: 'row', gap: 4, marginTop: 12 },
+  // Equal cells: `flex: 1` divides the card rather than letting a fixed width
+  // push the last one past its edge.
+  meterCell: { flex: 1, backgroundColor: TRACK, overflow: 'hidden' },
+
   scoreMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, flexWrap: 'wrap' },
   scoreMetaText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
   scoreMetaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#3F3F46', marginHorizontal: 2 },
-  ringCenter: { alignItems: 'center' },
-  ringValue: { color: TEXT, fontSize: 30, fontFamily: typography.bold, letterSpacing: -1, lineHeight: 34 },
-  ringSuffix: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular, marginTop: 1 },
   // Sizing, fill and radius all live in GradientButton; the card only says
   // where the button sits.
   scoreCta: { marginTop: 22 },
@@ -1457,7 +1435,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   insightTitle: {
-    color: '#A855F7',
+    color: TEXT_MUTED,
     fontSize: 11,
     fontFamily: typography.semiBold,
     textTransform: 'uppercase',

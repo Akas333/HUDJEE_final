@@ -6,12 +6,13 @@ import QuestionWiseAnalysisScreen from '../screens/TestAnalysis/QuestionWiseAnal
 import AISummaryScreen from '../screens/TestAnalysis/AISummaryScreen';
 import PracticeMistakeQuestionsScreen from '../screens/TestAnalysis/PracticeMistakeQuestionsScreen';
 import PostAnalysisNotesScreen from '../screens/TestAnalysis/PostAnalysisNotesScreen';
+import { BG } from '../theme/ui';
 
 const Stack = createNativeStackNavigator();
 
 export default function TestAnalysisNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: BG } }}>
       <Stack.Screen name="TestAnalysisScreen" component={TestAnalysisScreen} />
       <Stack.Screen name="PerformanceAnalysisScreen" component={PerformanceAnalysisScreen} />
       <Stack.Screen name="QuestionWiseAnalysisScreen" component={QuestionWiseAnalysisScreen} />

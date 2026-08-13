@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Clock, Hourglass, Play, Target, X } from 'lucide-react-native';
 
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import Avatar from '../../components/challenges/Avatar';
 import ChallengeHeader from '../../components/challenges/ChallengeHeader';
@@ -17,7 +18,9 @@ import { SUBJECT_COLORS } from '../../theme/subjects';
 import {
   CHALLENGE_TINT,
   GAP,
+  GLASS,
   GUTTER,
+  ON_LIGHT,
   RADIUS,
   SECTION_GAP,
   SURFACE,
@@ -263,29 +266,28 @@ export default function ChallengeDetailScreen({ navigation, route }: any) {
                 >
                   <Text style={styles.secondaryText}>Play later</Text>
                 </PressableScale>
-                <PressableScale
+                <GradientButton
+                  label="Start now"
+                  icon={<Play color="#FFFFFF" size={15} strokeWidth={2.6} />}
+                  iconSide="leading"
                   onPress={() => onAccept(true)}
-                  scaleTo={0.97}
                   disabled={busy !== null}
+                  loading={busy === 'accept'}
+                  height={50}
+                  radius={999}
                   style={styles.primaryButton}
-                >
-                  {busy === 'accept' ? (
-                    <ActivityIndicator color="#0B0B0C" size="small" />
-                  ) : (
-                    <>
-                      <Play color="#0B0B0C" size={15} strokeWidth={2.6} />
-                      <Text style={styles.primaryText}>Start now</Text>
-                    </>
-                  )}
-                </PressableScale>
+                />
               </>
             ) : (
-              <PressableScale onPress={startAttempt} scaleTo={0.97} style={styles.primaryButtonWide}>
-                <Play color="#0B0B0C" size={15} strokeWidth={2.6} />
-                <Text style={styles.primaryText}>
-                  {match.myAttempt ? 'Resume your set' : 'Answer your set'}
-                </Text>
-              </PressableScale>
+              <GradientButton
+                label={match.myAttempt ? 'Resume your set' : 'Answer your set'}
+                icon={<Play color="#FFFFFF" size={15} strokeWidth={2.6} />}
+                iconSide="leading"
+                onPress={startAttempt}
+                height={50}
+                radius={999}
+                style={styles.primaryButtonWide}
+              />
             )}
           </View>
         ) : null}
@@ -320,7 +322,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: SURFACE_BORDER,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: GLASS,
   },
   profileLinkText: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.semiBold },
 
@@ -393,25 +395,6 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE,
   },
   secondaryText: { color: TEXT, fontSize: 14, fontFamily: typography.semiBold },
-  primaryButton: {
-    flex: 1.3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-    paddingVertical: 15,
-    borderRadius: 999,
-    backgroundColor: '#F5F5F7',
-  },
-  primaryButtonWide: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    borderRadius: 999,
-    backgroundColor: '#F5F5F7',
-  },
-  primaryText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
+  primaryButton: { flex: 1.3 },
+  primaryButtonWide: { flex: 1 },
 });

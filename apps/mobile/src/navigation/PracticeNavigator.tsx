@@ -9,12 +9,13 @@ import VideoInterfaceScreen from '../screens/Learn/VideoInterfaceScreen';
 import PracticeListScreen from '../screens/Learn/PracticeListScreen';
 import PracticeInterfaceScreen from '../screens/Learn/PracticeInterfaceScreen';
 import WatchPracticeBridgeScreen from '../screens/Learn/WatchPracticeBridgeScreen';
+import { BG } from '../theme/ui';
 
 const Stack = createNativeStackNavigator();
 
 export default function PracticeNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: BG } }}>
       <Stack.Screen name="PracticeScreen" component={PracticeScreen} />
       <Stack.Screen name="PracticeConceptScreen" component={PracticeConceptScreen} />
       <Stack.Screen name="UnitCardScreen" component={UnitCardScreen} />

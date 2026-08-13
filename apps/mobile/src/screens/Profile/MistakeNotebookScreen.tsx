@@ -82,7 +82,7 @@ const SUBJECT_LABEL: Record<SubjectKey, string> = {
 
 function MistakeCard({ mistake, index }: { mistake: Mistake; index: number }) {
   const hue = SUBJECT_COLORS[mistake.subject];
-  const statusColor = mistake.reviewed ? POSITIVE : CAUTION;
+  const statusColor = mistake.reviewed ? TEXT : TEXT_FAINT;
 
   return (
     <Animated.View entering={enter(4 + index, 35)} style={styles.card}>

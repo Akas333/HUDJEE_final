@@ -8,7 +8,7 @@ import SettingsGroup from '../../components/settings/SettingsGroup';
 import SettingsRow from '../../components/settings/SettingsRow';
 import { useToastStore } from '../../services/ToastService';
 import { HapticService } from '../../services/HapticService';
-import { GRADIENT, PROFILE_TINT } from '../../theme/ui';
+import { PROFILE_TINT } from '../../theme/ui';
 
 type SheetId = 'chapter' | 'all' | 'mistakes' | 'account';
 
@@ -88,7 +88,6 @@ export default function DataResetScreen({ navigation }: any) {
       <SettingsGroup label="Your data" index={0}>
         <SettingsRow
           icon={Download}
-          accent={GRADIENT[1]}
           title="Export my data"
           subtitle="Everything we hold, as a file you can keep"
           onPress={() => {

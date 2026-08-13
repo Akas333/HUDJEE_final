@@ -2,7 +2,7 @@ import { SubjectKey } from './subjects';
 import { CAUTION, NEGATIVE, POSITIVE, TEXT_MUTED as MUTED } from './ui';
 
 // Challenges rides the same visual system as Home, Practice and Arena: 24pt
-// gutter, Nunito, raised dark cards over a tinted wash, hairline borders. Those
+// gutter, Nunito, solid cards on a flat page, hairline borders. Those
 // tokens come from `theme/ui` and are re-exported here so the ten Challenges
 // screens keep their existing imports — the two tabs sit next to each other in
 // the tab bar, and a near-miss between them reads as a bug.
@@ -13,16 +13,22 @@ import { CAUTION, NEGATIVE, POSITIVE, TEXT_MUTED as MUTED } from './ui';
 // win/loss accents — and nowhere in the chrome.
 
 export {
+  BG,
   CARD_WIDTH,
   DIVIDER,
+  DOT,
   GAP,
+  GLASS,
+  GLASS_BORDER,
   GOLD,
-  GRADIENT,
+  ACCENT,
   GUTTER,
+  ON_LIGHT,
   RADIUS,
   SECTION_GAP,
   SURFACE,
   SURFACE_BORDER,
+  SURFACE_SUBTLE,
   SURFACE_STRONG,
   TEXT,
   TEXT_FAINT,
@@ -30,8 +36,8 @@ export {
   TRACK,
 } from './ui';
 
-/** The social layer's own tint: neither of the three subjects owns this tab. */
-export const CHALLENGE_TINT = '#6D5BD0';
+/** The social layer's mark. White, like every other mark in the app. */
+export const CHALLENGE_TINT = '#FFFFFF';
 
 export const WIN = POSITIVE;
 export const LOSS = NEGATIVE;
@@ -62,10 +68,12 @@ export const TIER_BLURBS: Record<DifficultyTier, string> = {
 };
 
 export const TIER_COLORS: Record<DifficultyTier, string> = {
-  I: '#69EAC0',
-  II: '#40C9FF',
-  III: '#C79BF0',
-  IV: '#F0857C',
+  // A brightness ramp rather than four hues: the tiers are ordered, and order
+  // is exactly what a set of unrelated colours cannot show.
+  I: '#6B7280',
+  II: '#9CA3AF',
+  III: '#D1D5DB',
+  IV: '#FFFFFF',
 };
 
 // ─── configuration presets ───────────────────────────────────────────────────

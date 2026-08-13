@@ -10,12 +10,13 @@ import SyllabusAndReadinessScreen from '../screens/Test/SyllabusAndReadinessScre
 import TestInstructionsScreen from '../screens/Test/TestInstructionsScreen';
 import TestExecutionScreen from '../screens/Test/TestExecutionScreen';
 import ConnectToPCScreen from '../screens/Test/ConnectToPCScreen';
+import { BG } from '../theme/ui';
 
 const Stack = createNativeStackNavigator();
 
 export default function TestNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: BG } }}>
       <Stack.Screen name="TestScreen" component={TestScreen} />
       <Stack.Screen name="CourseTestSeriesScreen" component={CourseTestSeriesScreen} />
       <Stack.Screen name="CourseTestScreen" component={CourseTestScreen} />

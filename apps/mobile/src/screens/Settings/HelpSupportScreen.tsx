@@ -8,7 +8,7 @@ import SettingsGroup from '../../components/settings/SettingsGroup';
 import SettingsRow from '../../components/settings/SettingsRow';
 import { useToastStore } from '../../services/ToastService';
 import { HapticService } from '../../services/HapticService';
-import { CAUTION, GRADIENT, POSITIVE, PROFILE_TINT } from '../../theme/ui';
+import { PROFILE_TINT } from '../../theme/ui';
 
 const SUPPORT_EMAIL = 'support@hudjee.com';
 
@@ -39,7 +39,6 @@ export default function HelpSupportScreen({ navigation }: any) {
       <SettingsGroup label="Answers" index={0}>
         <SettingsRow
           icon={HelpCircle}
-          accent={GRADIENT[1]}
           title="FAQ"
           subtitle="How the adaptive engine picks your questions, and the rest"
           onPress={() => {
@@ -62,14 +61,12 @@ export default function HelpSupportScreen({ navigation }: any) {
         />
         <SettingsRow
           icon={Bug}
-          accent={CAUTION}
           title="Report a bug"
           subtitle="Something behaved wrongly"
           onPress={mail('HudJee bug report')}
         />
         <SettingsRow
           icon={MessageSquarePlus}
-          accent={POSITIVE}
           title="Send feedback"
           subtitle="Something you want, or something you would change"
           onPress={mail('HudJee feedback')}

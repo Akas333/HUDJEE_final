@@ -6,11 +6,12 @@ import { SURFACE_BORDER, SURFACE_STRONG, TEXT } from '../../theme/challenges';
 import { initialsOf } from '../../services/challengesApi';
 
 // There are no uploaded avatars in the product yet, so the social surfaces stand
-// on initials. A tinted disc per person rather than one grey disc for everybody:
-// the hue is derived from the handle, so the same friend is always the same
-// colour in the roster, the leaderboard and on their challenge cards.
+// on initials. The disc is still derived from the handle — the same friend is
+// the same shade in the roster, the leaderboard and on their challenge cards —
+// but the ramp is grey rather than seven hues, so a list of friends does not put
+// more colour on screen than anything the student is meant to act on.
 
-const HUES = ['#6D5BD0', '#3EADCF', '#E3B24C', '#DE6E4B', '#4FB477', '#B45FA8', '#5A7FD0'];
+const HUES = ['#2A2A30', '#33333A', '#3C3C44', '#45454E', '#4E4E58', '#575762', '#60606C'];
 
 function hueFor(seed: string): string {
   let hash = 0;

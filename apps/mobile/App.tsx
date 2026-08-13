@@ -4,14 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Font from 'expo-font';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { 
-  Nunito_400Regular, 
-  Nunito_500Medium, 
-  Nunito_600SemiBold, 
-  Nunito_700Bold, 
-  Nunito_800ExtraBold,
-  Nunito_900Black 
-} from '@expo-google-fonts/nunito';
+import { fontAssetsToLoad } from './src/theme/fonts';
 
 import AppNavigator from './src/navigation/AppNavigator';
 import Toast from './src/components/Toast';
@@ -22,15 +15,9 @@ export default function App() {
 
   useEffect(() => {
     async function loadFonts() {
-      await Font.loadAsync({
-        Nunito_400Regular,
-        Nunito_500Medium,
-        Nunito_600SemiBold,
-        Nunito_700Bold,
-        Nunito_800ExtraBold,
-        Nunito_900Black,
-
-      });
+      // Whichever family `theme/fonts` is pointed at — App does not name one,
+      // so swapping the face never means editing two files that must agree.
+      await Font.loadAsync(fontAssetsToLoad());
       setFontsLoaded(true);
     }
     loadFonts();

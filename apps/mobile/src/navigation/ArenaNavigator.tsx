@@ -4,12 +4,13 @@ import ArenaScreen from '../screens/Arena/ArenaScreen';
 import ArenaSetupScreen from '../screens/Arena/ArenaSetupScreen';
 import ActiveArenaSessionScreen from '../screens/Arena/ActiveArenaSessionScreen';
 import ArenaSummaryScreen from '../screens/Arena/ArenaSummaryScreen';
+import { BG } from '../theme/ui';
 
 const Stack = createNativeStackNavigator();
 
 export default function ArenaNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: BG } }}>
       {/* Mode choice → customisation → session → summary. */}
       <Stack.Screen name="ArenaHome" component={ArenaScreen} />
       <Stack.Screen name="ArenaSetup" component={ArenaSetupScreen} />

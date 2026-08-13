@@ -1,3 +1,5 @@
+import { TEXT, TEXT_FAINT, TEXT_MUTED } from './ui';
+
 export const colors = {
   // Brand Max Gradient (Neon Green to Cyan)
   primary: '#38BDF8', // Cyan/Sky
@@ -59,9 +61,14 @@ export const colors = {
   hudjeeSurfaceCardElevated: '#232329',
   hudjeeSurfaceCardPressed: '#28282F',
   hudjeeBorderSubtle: '#2A2A30',
-  hudjeeTextPrimary: '#F5F5F7',
-  hudjeeTextSecondary: '#8B8B93',
-  hudjeeTextTertiary: '#55555C',
+  // Deprecated aliases. These were the app's text scale before `theme/ui` took
+  // it over; they point at the real tokens so the handful of screens still
+  // reading them cannot render a second, dimmer scale beside the current one.
+  // Import from `theme/ui` in new code — these exist only so the last few
+  // callers can be migrated one at a time rather than in one risky sweep.
+  hudjeeTextPrimary: TEXT,
+  hudjeeTextSecondary: TEXT_MUTED,
+  hudjeeTextTertiary: TEXT_FAINT,
   hudjeeOverlayScrim: 'rgba(0, 0, 0, 0.6)',
   
   hudjeeProgressStart: '#46D8E0',

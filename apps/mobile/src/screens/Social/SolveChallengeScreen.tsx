@@ -14,6 +14,7 @@ import { ArrowRight, Lock, X } from 'lucide-react-native';
 
 import MathText from '../../components/MathText';
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import Avatar from '../../components/challenges/Avatar';
 import TierBadge from '../../components/challenges/TierBadge';
@@ -25,10 +26,17 @@ import { SUBJECT_COLORS } from '../../theme/subjects';
 import {
   AT_RISK,
   CHALLENGE_TINT,
+  DOT,
+  GLASS,
+  ACCENT,
+  GLASS_BORDER,
   GUTTER,
+  ON_LIGHT,
   RADIUS,
   SURFACE,
   SURFACE_BORDER,
+  SURFACE_STRONG,
+  SURFACE_SUBTLE,
   TEXT,
   TEXT_FAINT,
   TEXT_MUTED,
@@ -340,18 +348,16 @@ export default function SolveChallengeScreen({ navigation, route }: any) {
           </Text>
         </View>
 
-        <PressableScale
+        <GradientButton
+          label={index + 1 === total ? 'Submit set' : 'Lock it in'}
+          icon={<ArrowRight color="#FFFFFF" size={16} strokeWidth={2.4} />}
           onPress={() => commit(selected)}
           disabled={selected == null}
-          scaleTo={0.97}
-          style={[styles.submitButton, selected == null && styles.submitButtonDisabled]}
+          height={50}
+          radius={999}
+          block
           accessibilityLabel={index + 1 === total ? 'Submit set' : 'Lock answer and continue'}
-        >
-          <Animated.Text entering={FadeIn.duration(150)} style={styles.submitText}>
-            {index + 1 === total ? 'Submit set' : 'Lock it in'}
-          </Animated.Text>
-          <ArrowRight color="#0B0B0C" size={16} strokeWidth={2.4} />
-        </PressableScale>
+        />
       </View>
     </>
   );
@@ -371,9 +377,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingVertical: 13,
     borderRadius: 999,
-    backgroundColor: '#F5F5F7',
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    backgroundColor: SURFACE_STRONG,
   },
-  stateButtonText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
+  stateButtonText: { color: TEXT, fontSize: 14, fontFamily: typography.bold },
 
   banner: {
     flexDirection: 'row',
@@ -386,9 +394,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: GLASS,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: GLASS_BORDER,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -403,8 +411,8 @@ const styles = StyleSheet.create({
   timerText: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.bold, width: 44, textAlign: 'right' },
 
   pips: { flexDirection: 'row', gap: 5, paddingHorizontal: GUTTER, marginTop: 14 },
-  pip: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.10)' },
-  pipDone: { backgroundColor: 'rgba(255,255,255,0.45)' },
+  pip: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: TRACK },
+  pipDone: { backgroundColor: ACCENT },
   pipCurrent: { backgroundColor: '#FFFFFF' },
 
   questionCard: {
@@ -428,18 +436,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
-  optionActive: { borderColor: 'rgba(255,255,255,0.45)', backgroundColor: 'rgba(255,255,255,0.08)' },
+  optionActive: { borderColor: ACCENT, backgroundColor: SURFACE_STRONG },
   optionBadge: {
     width: 28,
     height: 28,
     borderRadius: 9,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: SURFACE_SUBTLE,
     justifyContent: 'center',
     alignItems: 'center',
   },
   optionBadgeActive: { backgroundColor: '#FFFFFF' },
   optionBadgeText: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.bold },
-  optionBadgeTextActive: { color: '#0B0B0C' },
+  optionBadgeTextActive: { color: ON_LIGHT },
   optionText: { flex: 1, color: TEXT_MUTED, fontSize: 15, lineHeight: 22, fontFamily: typography.regular },
   optionTextActive: { color: TEXT },
 
@@ -453,15 +461,4 @@ const styles = StyleSheet.create({
   },
   footerNote: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   footerNoteText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
-  submitButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    borderRadius: 999,
-    backgroundColor: '#F5F5F7',
-  },
-  submitButtonDisabled: { opacity: 0.4 },
-  submitText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
 });

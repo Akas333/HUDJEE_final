@@ -8,11 +8,9 @@ import {
   Image,
   Animated as RNAnimated,
   Easing as RNEasing,
-  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   FadeInDown,
   SharedValue,
@@ -26,36 +24,37 @@ import Animated, {
 import { Bell, ChevronRight, BookOpen, Sparkles } from 'lucide-react-native';
 
 import Skeleton from '../../components/Skeleton';
+import SegmentIndicator from '../../components/ui/SegmentIndicator';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import { HapticService } from '../../services/HapticService';
 import { useSubjectStore } from '../../store/subjectStore';
-import { SUBJECT_COLORS, SubjectKey, subjectKeyOf, tintFor, withAlpha } from '../../theme/subjects';
-import { colors } from '../../theme/colors';
+import { SUBJECT_COLORS, SubjectKey, subjectKeyOf, tintFor } from '../../theme/subjects';
 import { typography } from '../../theme/typography';
+import {
+  ACCENT,
+  BG,
+  CARD_WIDTH,
+  DOT,
+  GAP,
+  GUTTER,
+  RADIUS,
+  SURFACE,
+  SURFACE_BORDER,
+  SURFACE_SUBTLE,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  TRACK,
+} from '../../theme/ui';
 import { Chapter } from '../../services/api.mock';
 import { EngineApi } from '../../services/api';
 import { ChapterProgress, fetchChapterProgress } from '../../services/practiceApi';
 
-const { width } = Dimensions.get('window');
-
 // ─── design tokens ───────────────────────────────────────────────────────────
-// Same system as the Home tab: 24pt gutter, Nunito throughout, translucent white
-// surfaces over the indigo→black wash, hairline borders.
-
-const GUTTER = 24;
-const GAP = 12;
-const CARD_WIDTH = width - GUTTER * 2;
-const RADIUS = 18;
-
-const SURFACE = 'rgba(255,255,255,0.05)';
-const SURFACE_BORDER = 'rgba(255,255,255,0.09)';
-const TRACK = 'rgba(255,255,255,0.09)';
-
-const TEXT = colors.hudjeeTextPrimary;
-const TEXT_MUTED = colors.hudjeeTextSecondary;
-const TEXT_FAINT = colors.hudjeeTextTertiary;
-
-const GRADIENT: [string, string] = ['#69EAC0', '#40C9FF'];
+// The app's, from `theme/ui`. These were local translucent copies over a
+// subject-tinted wash; both are gone. The subject is still legible at a glance —
+// it is just carried by the marks that name it (the selected pill, each
+// chapter's index badge) rather than by painting a third of the page.
 
 const SUBJECTS = ['Physics', 'Chemistry', 'Maths'];
 const SUBJECT_KEYS: SubjectKey[] = ['physics', 'chemistry', 'maths'];
@@ -63,8 +62,6 @@ const SUBJECT_KEYS: SubjectKey[] = ['physics', 'chemistry', 'maths'];
 // One accent per subject, from the shared subject palette — the same colour that
 // tints the backdrop, so the switcher and the water behind it always agree.
 const SUBJECT_ACCENTS = SUBJECT_KEYS.map((k) => SUBJECT_COLORS[k]);
-const SUBJECT_TINTS = SUBJECT_ACCENTS.map((c) => withAlpha(c, 0.16));
-const SUBJECT_EDGES = SUBJECT_ACCENTS.map((c) => withAlpha(c, 0.38));
 
 const FAST_OUT_SLOW_IN = Easing.bezier(0.4, 0, 0.2, 1);
 const RN_FAST_OUT_SLOW_IN = RNEasing.bezier(0.4, 0, 0.2, 1);
@@ -179,14 +176,14 @@ function ProgressBar({ value, height = 6, delay = 0 }: { value: number; height?:
 
   return (
     <View style={[styles.track, { height, borderRadius: height / 2 }]}>
-      <RNAnimated.View style={{ width: barWidth, height: '100%' }}>
-        <LinearGradient
-          colors={GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={{ flex: 1, borderRadius: height / 2 }}
-        />
-      </RNAnimated.View>
+      <RNAnimated.View
+        style={{
+          width: barWidth,
+          height: '100%',
+          borderRadius: height / 2,
+          backgroundColor: ACCENT,
+        }}
+      />
     </View>
   );
 }
@@ -207,13 +204,13 @@ function SubjectTabs({ activeIndex, onChange }: { activeIndex: number; onChange:
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: pos.value * SEG_WIDTH }],
-    backgroundColor: interpolateColor(pos.value, [0, 1, 2], SUBJECT_TINTS),
-    borderColor: interpolateColor(pos.value, [0, 1, 2], SUBJECT_EDGES),
   }));
 
   return (
     <View style={styles.segment}>
-      <Animated.View style={[styles.segmentIndicator, indicatorStyle]} />
+      <Animated.View style={[styles.segmentIndicator, indicatorStyle]}>
+        <SegmentIndicator />
+      </Animated.View>
       {SUBJECTS.map((subject, i) => (
         <SubjectTab key={subject} label={subject} index={i} pos={pos} onPress={() => onChange(i)} />
       ))}
@@ -413,8 +410,6 @@ export default function PracticeScreen({ navigation, route }: any) {
 
   return (
     <View style={styles.root}>
-      {/* Tinted by the selected subject: switching tabs washes one wave out and
-          rolls the next one in. */}
       <SubjectBackdrop color={tintFor(SUBJECT_KEYS[subjectIndex])} />
 
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -506,7 +501,7 @@ export default function PracticeScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  root: { flex: 1, backgroundColor: BG },
   safeArea: { flex: 1 },
   container: { flex: 1 },
   content: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 48 },
@@ -546,8 +541,6 @@ const styles = StyleSheet.create({
     top: SEG_PAD,
     bottom: SEG_PAD,
     width: SEG_WIDTH,
-    borderRadius: 999,
-    borderWidth: 1,
   },
   segmentTab: { width: SEG_WIDTH, paddingVertical: 11, alignItems: 'center' },
   segmentLabel: { fontSize: 14, fontFamily: typography.semiBold, letterSpacing: -0.1 },
@@ -588,7 +581,7 @@ const styles = StyleSheet.create({
   chapterProgressValue: { color: TEXT, fontSize: 12, fontFamily: typography.semiBold },
   chapterStats: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14, flexWrap: 'wrap' },
   chapterStatText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
-  chapterStatDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
+  chapterStatDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: DOT },
 
   // Empty state
   emptyCard: {
@@ -603,7 +596,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: SURFACE_SUBTLE,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 14,

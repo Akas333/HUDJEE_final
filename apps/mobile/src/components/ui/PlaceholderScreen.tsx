@@ -13,6 +13,8 @@ import {
 import {
   enter,
   GAP,
+  GLASS,
+  GLASS_BORDER,
   RADIUS,
   SURFACE,
   SURFACE_BORDER,
@@ -26,8 +28,8 @@ import {
  *
  * They used to render their own class name on a bare black page with a "Go Back"
  * button, which is fine as a routing stub and indefensible as a thing a student
- * can reach. This gives them the same header, gutter and wash as everywhere
- * else, says plainly that the screen is unfinished, and — where the caller can
+ * can reach. This gives them the same header, gutter and surfaces as
+ * everywhere else, says plainly that the screen is unfinished, and — where the caller can
  * say — lists what will live here, so the page is worth landing on even now.
  */
 export default function PlaceholderScreen({
@@ -98,9 +100,9 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: GLASS,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: GLASS_BORDER,
     justifyContent: 'center',
     alignItems: 'center',
   },

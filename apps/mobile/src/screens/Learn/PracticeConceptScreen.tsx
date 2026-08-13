@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   FadeInDown,
   useSharedValue,
@@ -27,8 +26,22 @@ import GradientButton from '../../components/ui/GradientButton';
 import { HapticService } from '../../services/HapticService';
 import { useSubjectStore } from '../../store/subjectStore';
 import { SUBJECT_COLORS, subjectKeyOf, tintFor } from '../../theme/subjects';
-import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import {
+  ACCENT,
+  BG,
+  DOT,
+  GAP,
+  GUTTER,
+  RADIUS,
+  SURFACE,
+  SURFACE_BORDER,
+  SURFACE_SUBTLE,
+  TEXT,
+  TEXT_FAINT,
+  TEXT_MUTED,
+  TRACK,
+} from '../../theme/ui';
 import { EngineApi } from '../../services/api';
 import {
   ChapterProgress,
@@ -37,21 +50,9 @@ import {
   fetchTopicProgress,
 } from '../../services/practiceApi';
 
-// ─── design tokens (shared with Home and the chapter list) ───────────────────
-
-const GUTTER = 24;
-const GAP = 12;
-const RADIUS = 18;
-
-const SURFACE = 'rgba(255,255,255,0.05)';
-const SURFACE_BORDER = 'rgba(255,255,255,0.09)';
-const TRACK = 'rgba(255,255,255,0.09)';
-
-const TEXT = colors.hudjeeTextPrimary;
-const TEXT_MUTED = colors.hudjeeTextSecondary;
-const TEXT_FAINT = colors.hudjeeTextTertiary;
-
-const GRADIENT: [string, string] = ['#69EAC0', '#40C9FF'];
+// ─── design tokens (the app's, from `theme/ui`) ──────────────────────────────
+// Solid surfaces on a flat page — see the note in `PracticeScreen`. The subject
+// reaches this screen as the accent on each topic's index badge, nothing more.
 
 const FAST_OUT_SLOW_IN = Easing.bezier(0.4, 0, 0.2, 1);
 const RN_FAST_OUT_SLOW_IN = RNEasing.bezier(0.4, 0, 0.2, 1);
@@ -179,14 +180,14 @@ function ProgressBar({
 
   return (
     <View style={[styles.track, { height, borderRadius: height / 2 }]}>
-      <RNAnimated.View style={{ width: barWidth, height: '100%' }}>
-        <LinearGradient
-          colors={GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={{ flex: 1, borderRadius: height / 2 }}
-        />
-      </RNAnimated.View>
+      <RNAnimated.View
+        style={{
+          width: barWidth,
+          height: '100%',
+          borderRadius: height / 2,
+          backgroundColor: ACCENT,
+        }}
+      />
     </View>
   );
 }
@@ -436,7 +437,7 @@ export default function PracticeConceptScreen({ route, navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.hudjeeBgBase },
+  root: { flex: 1, backgroundColor: BG },
   safeArea: { flex: 1 },
   container: { flex: 1 },
   content: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 48 },
@@ -479,7 +480,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderWidth: 1,
     borderColor: SURFACE_BORDER,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: SURFACE_SUBTLE,
   },
   topicChipText: { color: TEXT_MUTED, fontSize: 11, fontFamily: typography.semiBold },
   heroValueRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 18 },
@@ -487,7 +488,7 @@ const styles = StyleSheet.create({
   heroValueSuffix: { color: TEXT_FAINT, fontSize: 15, fontFamily: typography.regular, marginLeft: 4 },
   heroStats: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14, flexWrap: 'wrap' },
   heroStatText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
-  heroStatDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
+  heroStatDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: DOT },
 
   ctaWrap: { marginTop: 20 },
 
@@ -538,7 +539,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: SURFACE_SUBTLE,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 14,

@@ -11,13 +11,14 @@ import StreakDetailScreen from '../screens/Social/StreakDetailScreen';
 import LeaderBoardScreen from '../screens/Social/LeaderBoardScreen';
 import ManageFriendsScreen from '../screens/Social/ManageFriendsScreen';
 import FriendProfileScreen from '../screens/Social/FriendProfileScreen';
+import { BG } from '../theme/ui';
 
 const Stack = createNativeStackNavigator();
 
 export default function SocialNavigator() {
   return (
     <Stack.Navigator
-      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: BG } }}
     >
       <Stack.Screen name="ChallengesHome" component={ChallengesScreen} />
       <Stack.Screen name="ChallengeCompose" component={ChallengeComposeScreen} />

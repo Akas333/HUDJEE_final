@@ -5,16 +5,19 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { ArrowRight, Clock, Target, TrendingDown, TrendingUp } from 'lucide-react-native';
 
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { DEFAULT_TINT, SUBJECT_COLORS, SubjectKey, tintFor } from '../../theme/subjects';
 import { ArenaSummary } from '../../services/arenaApi';
 import {
+  DOT,
   GAP,
   GUTTER,
   MODE_BY_ID,
   NEGATIVE,
+  ON_LIGHT,
   POSITIVE,
   RADIUS,
   SECTION_GAP,
@@ -68,9 +71,9 @@ function SubjectCard({ subject, index }: { subject: ArenaSummary['subjects'][num
           ]}
         >
           {up ? (
-            <TrendingUp color={POSITIVE} size={13} strokeWidth={2.5} />
+            <TrendingUp color={TEXT_MUTED} size={13} strokeWidth={2.5} />
           ) : (
-            <TrendingDown color={NEGATIVE} size={13} strokeWidth={2.5} />
+            <TrendingDown color={TEXT_MUTED} size={13} strokeWidth={2.5} />
           )}
           <Text style={[styles.deltaText, { color: up ? POSITIVE : NEGATIVE }]}>
             {up ? `+${subject.mastery_delta}` : subject.mastery_delta}
@@ -133,9 +136,13 @@ export default function ArenaSummaryScreen({ navigation, route }: any) {
             <Text style={styles.centeredText}>
               Your answers are in, but the summary could not be loaded this time.
             </Text>
-            <PressableScale onPress={goHome} style={styles.primaryButton}>
-              <Text style={styles.primaryText}>Back to Arena</Text>
-            </PressableScale>
+            <GradientButton
+              label="Back to Arena"
+              onPress={goHome}
+              height={48}
+              radius={999}
+              style={styles.primaryButton}
+            />
           </View>
         </SafeAreaView>
       </View>
@@ -232,9 +239,13 @@ export default function ArenaSummaryScreen({ navigation, route }: any) {
           >
             <Text style={styles.secondaryText}>Review misses</Text>
           </PressableScale>
-          <PressableScale onPress={goHome} scaleTo={0.97} style={styles.primaryButtonInline}>
-            <Text style={styles.primaryText}>Another run</Text>
-          </PressableScale>
+          <GradientButton
+            label="Another run"
+            onPress={goHome}
+            height={50}
+            radius={999}
+            style={styles.primaryButtonInline}
+          />
         </View>
       </SafeAreaView>
     </View>
@@ -297,7 +308,7 @@ const styles = StyleSheet.create({
 
   subjectStats: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 14, flexWrap: 'wrap' },
   subjectStatText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
-  statDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
+  statDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: DOT },
 
   missedCard: {
     backgroundColor: SURFACE,
@@ -330,7 +341,6 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE,
   },
   secondaryText: { color: TEXT, fontSize: 14, fontFamily: typography.semiBold },
-  primaryButton: { paddingHorizontal: 26, paddingVertical: 14, borderRadius: 999, backgroundColor: '#F5F5F7', marginTop: 8 },
-  primaryButtonInline: { flex: 1, alignItems: 'center', paddingVertical: 15, borderRadius: 999, backgroundColor: '#F5F5F7' },
-  primaryText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
+  primaryButton: { marginTop: 8 },
+  primaryButtonInline: { flex: 1 },
 });

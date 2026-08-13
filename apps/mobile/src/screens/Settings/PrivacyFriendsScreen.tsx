@@ -16,7 +16,6 @@ import { typography } from '../../theme/typography';
 import { CHALLENGE_TINT } from '../../theme/challenges';
 import {
   enter,
-  NEGATIVE,
   PROFILE_TINT,
   RADIUS_INNER,
   SURFACE_BORDER,
@@ -67,7 +66,6 @@ export default function PrivacyFriendsScreen({ navigation }: any) {
           options={REACH_OPTIONS}
           value={reach}
           onChange={setReach}
-          accent={CHALLENGE_TINT}
         />
       </SettingsGroup>
 
@@ -95,7 +93,6 @@ export default function PrivacyFriendsScreen({ navigation }: any) {
             <SettingsRow
               key={user.id}
               icon={UserX}
-              accent={NEGATIVE}
               title={user.name}
               subtitle="Cannot see you or send you anything"
               right={

@@ -5,6 +5,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Check, Send } from 'lucide-react-native';
 
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import Skeleton from '../../components/Skeleton';
 import Avatar from '../../components/challenges/Avatar';
@@ -21,6 +22,7 @@ import {
   DEFAULT_TIMER_SECONDS,
   EXPIRY_HOURS,
   GUTTER,
+  ON_LIGHT,
   PER_QUESTION_SECONDS,
   RADIUS,
   SECTION_GAP,
@@ -468,22 +470,17 @@ export default function ChallengeComposeScreen({ navigation, route }: any) {
         </ScrollView>
 
         <View style={styles.footer}>
-          <PressableScale
+          <GradientButton
+            label="Send challenge"
+            icon={<Send color="#FFFFFF" size={16} strokeWidth={2.4} />}
+            iconSide="leading"
             onPress={onSend}
             disabled={!canSend}
-            scaleTo={0.97}
-            style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
-            accessibilityLabel="Send challenge"
-          >
-            {sending ? (
-              <ActivityIndicator color="#0B0B0C" size="small" />
-            ) : (
-              <>
-                <Send color="#0B0B0C" size={16} strokeWidth={2.4} />
-                <Text style={styles.sendText}>Send challenge</Text>
-              </>
-            )}
-          </PressableScale>
+            loading={sending}
+            height={50}
+            radius={999}
+            block
+          />
         </View>
       </SafeAreaView>
     </View>
@@ -557,7 +554,7 @@ const styles = StyleSheet.create({
   confirmSummary: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.regular, marginTop: 14, lineHeight: 19 },
   drawingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   confirmNote: { color: TEXT_FAINT, fontSize: 12, fontFamily: typography.regular, marginTop: 10, lineHeight: 17 },
-  confirmWarning: { color: '#F0B65C', fontSize: 12, fontFamily: typography.semiBold, marginTop: 10, lineHeight: 17 },
+  confirmWarning: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.semiBold, marginTop: 10, lineHeight: 17 },
 
   emptyCard: {
     backgroundColor: SURFACE,
@@ -577,15 +574,4 @@ const styles = StyleSheet.create({
     borderTopColor: SURFACE_BORDER,
     backgroundColor: 'rgba(11,11,12,0.86)',
   },
-  sendButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    borderRadius: 999,
-    backgroundColor: '#F5F5F7',
-  },
-  sendButtonDisabled: { opacity: 0.45 },
-  sendText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
 });

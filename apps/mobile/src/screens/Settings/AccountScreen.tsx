@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../services/ToastService';
 import { HapticService } from '../../services/HapticService';
 import { typography } from '../../theme/typography';
-import { GRADIENT, PROFILE_TINT, SURFACE_STRONG, TEXT_FAINT } from '../../theme/ui';
+import { ACCENT, PROFILE_TINT, SURFACE_STRONG, TEXT_FAINT } from '../../theme/ui';
 
 // The save affordance lives in the header rather than at the bottom of the form:
 // there are three fields, the screen never scrolls, and a button pinned below
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 38,
     borderRadius: 19,
-    backgroundColor: GRADIENT[0],
+    backgroundColor: ACCENT,
   },
   saveIdle: { backgroundColor: SURFACE_STRONG },
   saveText: { color: '#0B0B0E', fontSize: 13, fontFamily: typography.bold },

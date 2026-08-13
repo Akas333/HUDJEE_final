@@ -15,13 +15,15 @@ export function StatTile({
   value,
   caption,
   icon: Icon,
-  accent = TEXT_MUTED,
+  accent = TEXT,
 }: {
   label: string;
   value: string;
   /** A word under the number — a band, a trend. */
   caption?: string;
   icon?: any;
+  /** Left white on purpose. It is a hook for a state that genuinely needs a
+   *  colour, not a slot for one colour per tile. */
   accent?: string;
 }) {
   return (

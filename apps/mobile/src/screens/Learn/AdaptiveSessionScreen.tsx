@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import QuestionView from '../../components/practice/QuestionView';
 import SolutionCard from '../../components/practice/SolutionCard';
@@ -41,6 +42,7 @@ import {
   GLASS_BORDER,
   GUTTER,
   NEGATIVE,
+  ON_LIGHT,
   POSITIVE,
   RADIUS,
   SURFACE,
@@ -441,7 +443,7 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
       <>
         {renderHeader()}
         <View style={styles.centered}>
-          <ActivityIndicator color={accent} size="large" />
+          <ActivityIndicator color={TEXT_MUTED} size="large" />
         </View>
       </>
     );
@@ -470,17 +472,19 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
         {renderHeader()}
         <View style={styles.centered}>
           <View style={styles.masterCard}>
-            <Trophy color={POSITIVE} size={52} />
+            <Trophy color={TEXT} size={52} />
             <Text style={styles.centeredTitle}>You are a master now</Text>
             <Text style={styles.centeredText}>
               You have cleared every question available for this concept.
             </Text>
-            <PressableScale
+            <GradientButton
+              label="Review summary"
               onPress={handleExit}
-              style={[styles.primaryButton, { backgroundColor: accent }]}
-            >
-              <Text style={styles.primaryText}>Review summary</Text>
-            </PressableScale>
+              height={50}
+              radius={999}
+              block
+              style={styles.primaryButton}
+            />
           </View>
         </View>
         {renderSummaryModal()}
@@ -536,7 +540,7 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
         </ScrollView>
       ) : (
         <View style={styles.centered}>
-          <ActivityIndicator color={accent} />
+          <ActivityIndicator color={TEXT_MUTED} />
         </View>
       )}
 
@@ -554,30 +558,15 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
               <Text style={styles.skipText}>Skip</Text>
             </PressableScale>
 
-            <PressableScale
+            <GradientButton
+              label="Submit"
               onPress={handleSubmit}
-              disabled={!isDraftComplete(draft) || phase === 'submitting'}
-              scaleTo={0.97}
-              style={[
-                styles.submitButton,
-                {
-                  backgroundColor: isDraftComplete(draft) && phase === 'answering' ? accent : SURFACE_STRONG,
-                },
-              ]}
-            >
-              {phase === 'submitting' ? (
-                <ActivityIndicator color={TEXT_MUTED} size="small" />
-              ) : (
-                <Text
-                  style={[
-                    styles.submitText,
-                    { color: isDraftComplete(draft) ? '#0B0B0C' : TEXT_FAINT },
-                  ]}
-                >
-                  Submit
-                </Text>
-              )}
-            </PressableScale>
+              disabled={!isDraftComplete(draft)}
+              loading={phase === 'submitting'}
+              height={52}
+              radius={999}
+              style={styles.submitButton}
+            />
           </>
         ) : (
           <>
@@ -597,15 +586,13 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
             {/* A right answer moves on by itself, so it needs no button — unless
                 there is nothing left to move on to. */}
             {!answerData?.correct || !nextQuestion ? (
-              <PressableScale
+              <GradientButton
+                label={nextQuestion ? 'Next question' : 'Finish session'}
                 onPress={nextQuestion ? advance : handleExit}
-                scaleTo={0.97}
-                style={[styles.submitButton, { backgroundColor: '#F5F5F7' }]}
-              >
-                <Text style={[styles.submitText, { color: '#0B0B0C' }]}>
-                  {nextQuestion ? 'Next question' : 'Finish session'}
-                </Text>
-              </PressableScale>
+                height={52}
+                radius={999}
+                block
+              />
             ) : null}
           </>
         )}
@@ -630,13 +617,13 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
               >
                 <Text style={[styles.modalButtonText, { color: TEXT }]}>Keep going</Text>
               </PressableScale>
-              <PressableScale
+              <GradientButton
+                label="End session"
                 onPress={handleExit}
-                scaleTo={0.96}
-                style={[styles.modalButton, { backgroundColor: accent }]}
-              >
-                <Text style={[styles.modalButtonText, { color: '#0B0B0C' }]}>End session</Text>
-              </PressableScale>
+                height={48}
+                radius={999}
+                style={styles.modalButton}
+              />
             </View>
           </View>
         </View>
@@ -646,19 +633,20 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
       <Modal visible={showSwitchWarning} animationType="fade" transparent>
         <View style={styles.modalScrim}>
           <View style={[styles.modalCard, { alignItems: 'center' }]}>
-            <AlertTriangle color="#F0B65C" size={44} />
+            <AlertTriangle color={TEXT_MUTED} size={44} />
             <Text style={[styles.modalTitle, { marginTop: 14 }]}>Don't switch apps</Text>
             <Text style={[styles.modalText, { textAlign: 'center' }]}>
               Switching to another app during practice is not allowed. If you do it again, your
               session will end automatically.
             </Text>
-            <PressableScale
+            <GradientButton
+              label="Continue practicing"
               onPress={() => setShowSwitchWarning(false)}
-              scaleTo={0.96}
-              style={[styles.modalButton, { backgroundColor: accent, marginTop: 22, width: '100%' }]}
-            >
-              <Text style={[styles.modalButtonText, { color: '#0B0B0C' }]}>Continue practicing</Text>
-            </PressableScale>
+              height={48}
+              radius={999}
+              block
+              style={{ marginTop: 22 }}
+            />
           </View>
         </View>
       </Modal>
@@ -687,12 +675,14 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
                 <Text style={styles.summaryLabel}>Time</Text>
               </View>
             </View>
-            <PressableScale
+            <GradientButton
+              label="Done"
               onPress={() => navigation.goBack()}
-              style={[styles.primaryButton, { backgroundColor: accent }]}
-            >
-              <Text style={styles.primaryText}>Done</Text>
-            </PressableScale>
+              height={50}
+              radius={999}
+              block
+              style={styles.primaryButton}
+            />
           </View>
         </View>
       </Modal>
@@ -836,13 +826,13 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE,
   },
   skipText: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.semiBold },
-  submitButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 999 },
+  submitButton: { flex: 1 },
   submitText: { fontSize: 15, fontFamily: typography.bold, letterSpacing: -0.2 },
   verdictBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16, paddingHorizontal: 6 },
   verdictText: { fontSize: 14, fontFamily: typography.bold },
 
-  primaryButton: { width: '100%', alignItems: 'center', paddingVertical: 15, borderRadius: 999, marginTop: 8 },
-  primaryText: { color: '#0B0B0C', fontSize: 15, fontFamily: typography.bold },
+  primaryButton: { marginTop: 8 },
+  primaryText: { color: ON_LIGHT, fontSize: 15, fontFamily: typography.bold },
   secondaryButton: {
     marginTop: 8,
     paddingHorizontal: 24,
@@ -872,7 +862,7 @@ const styles = StyleSheet.create({
   modalTitle: { color: TEXT, fontSize: 18, fontFamily: typography.bold, marginBottom: 8 },
   modalText: { color: TEXT_MUTED, fontSize: 14, fontFamily: typography.regular, lineHeight: 20 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 22 },
-  modalButton: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 999 },
+  modalButton: { flex: 1 },
   modalButtonText: { fontSize: 14, fontFamily: typography.bold },
 
   sheetScrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },

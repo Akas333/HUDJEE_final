@@ -3,7 +3,7 @@ import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native'
 
 import { typography } from '../../theme/typography';
 import {
-  GRADIENT,
+  ACCENT,
   RADIUS_INNER,
   SURFACE_BORDER,
   TEXT,
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: typography.medium,
   },
-  inputFocused: { borderColor: GRADIENT[0] },
+  inputFocused: { borderColor: ACCENT },
   inputLocked: { color: TEXT_MUTED },
   hint: { color: TEXT_MUTED, fontSize: 12, fontFamily: typography.regular, lineHeight: 17 },
 });

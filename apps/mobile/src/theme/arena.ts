@@ -3,23 +3,27 @@ import { Crosshair, FlagTriangleRight, Infinity as InfinityIcon, Timer } from 'l
 import { SubjectKey } from './subjects';
 
 // Arena rides the same visual system as Home and Practice: 24pt gutter, Nunito,
-// raised dark cards over a tinted wash, hairline borders. Those tokens are the
+// solid cards on a flat page, hairline borders. Those tokens are the
 // app's, not Arena's, so they come from `theme/ui` — this file re-exports them
 // so the four Arena screens keep their existing imports, and holds only what is
 // genuinely Arena's own: the modes, the presets, the clock formatting.
 
 export {
+  BG,
   CARD_WIDTH,
   DIVIDER,
+  DOT,
   GAP,
-  GRADIENT,
+  ACCENT,
   GUTTER,
   NEGATIVE,
+  ON_LIGHT,
   POSITIVE,
   RADIUS,
   SECTION_GAP,
   SURFACE,
   SURFACE_BORDER,
+  SURFACE_SUBTLE,
   SURFACE_STRONG,
   TEXT,
   TEXT_FAINT,
@@ -66,7 +70,7 @@ export const ARENA_MODES: ArenaMode[] = [
     tagline: 'Endless adaptive questions across whatever you pick. Stop whenever you want.',
     meta: 'No timer · No limit',
     icon: InfinityIcon,
-    accent: '#A78BFA',
+    accent: '#FFFFFF',
     timed: false,
     counted: false,
   },
@@ -76,7 +80,7 @@ export const ARENA_MODES: ArenaMode[] = [
     tagline: 'Solve as many as you can before the clock runs out.',
     meta: 'Fixed time · No limit',
     icon: Timer,
-    accent: '#40C9FF',
+    accent: '#FFFFFF',
     timed: true,
     counted: false,
   },
@@ -86,7 +90,7 @@ export const ARENA_MODES: ArenaMode[] = [
     tagline: 'Hit a set number of questions with no clock on your back.',
     meta: 'No timer · Fixed count',
     icon: Crosshair,
-    accent: '#69EAC0',
+    accent: '#FFFFFF',
     timed: false,
     counted: true,
   },
@@ -96,7 +100,7 @@ export const ARENA_MODES: ArenaMode[] = [
     tagline: 'Fixed count and fixed time — the closest thing to the real paper.',
     meta: 'Fixed time · Fixed count',
     icon: FlagTriangleRight,
-    accent: '#F0B65C',
+    accent: '#FFFFFF',
     timed: true,
     counted: true,
   },

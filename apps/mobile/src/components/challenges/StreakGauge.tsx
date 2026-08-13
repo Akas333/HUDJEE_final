@@ -1,11 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated as RNAnimated, Easing as RNEasing, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 
 import { typography } from '../../theme/typography';
 import {
   AT_RISK,
-  GRADIENT,
+  ACCENT,
   STREAK_BAND,
   TEXT,
   TEXT_FAINT,
@@ -70,19 +70,12 @@ export default function StreakGauge({
       }
     >
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Defs>
-          <SvgGradient id="streakGradient" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={atRisk ? AT_RISK : GRADIENT[0]} />
-            <Stop offset="1" stopColor={atRisk ? '#E8C98A' : GRADIENT[1]} />
-          </SvgGradient>
-        </Defs>
-
         <Circle cx={size / 2} cy={size / 2} r={radius} stroke={TRACK} strokeWidth={stroke} fill="none" />
         <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="url(#streakGradient)"
+          stroke={atRisk ? AT_RISK : ACCENT}
           strokeWidth={stroke}
           strokeLinecap="round"
           fill="none"

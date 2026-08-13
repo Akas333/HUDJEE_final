@@ -14,6 +14,7 @@ import SubjectBackdrop from '../components/SubjectBackdrop';
 import { colors } from '../theme/colors';
 import { typography } from '../theme/typography';
 import { DEFAULT_TINT } from '../theme/subjects';
+import { SURFACE_BORDER, SURFACE_SUBTLE } from '../theme/ui';
 import { createSessionFromUrl, signInWithGoogle } from '../lib/googleAuth';
 import { isGuestSignInAvailable, signInAsGuest } from '../lib/guestAuth';
 import { useToastStore } from '../services/ToastService';
@@ -206,8 +207,8 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderColor: SURFACE_BORDER,
+    backgroundColor: SURFACE_SUBTLE,
   },
   guestButtonText: {
     color: colors.hudjeeTextSecondary,

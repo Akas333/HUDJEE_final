@@ -8,6 +8,7 @@ import TierBadge from './TierBadge';
 import { typography } from '../../theme/typography';
 import { SUBJECT_COLORS, SubjectKey } from '../../theme/subjects';
 import {
+  DOT,
   DRAW,
   GAP,
   LOSS,
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
     bottom: 14,
     justifyContent: 'space-between',
   },
-  notch: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.14)' },
+  notch: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: DOT },
 
   top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   titleGroup: { flex: 1 },
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, flexWrap: 'wrap' },
   subjectDot: { width: 5, height: 5, borderRadius: 2.5 },
   metaText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular, flexShrink: 1 },
-  metaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
+  metaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: DOT },
 
   footer: {
     flexDirection: 'row',

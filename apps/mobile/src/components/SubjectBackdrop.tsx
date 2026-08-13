@@ -1,55 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 
-import { backdropFor } from '../theme/subjects';
-
-const FADE_DURATION = 600;
-const FAST_OUT_SLOW_IN = Easing.bezier(0.4, 0, 0.2, 1);
-
-/** Home's backdrop, in whatever colour it is handed. */
-function Wash({ color }: { color: string }) {
-  return (
-    <LinearGradient
-      colors={backdropFor(color)}
-      start={{ x: 0.2, y: 0.1 }}
-      end={{ x: 0.8, y: 0.8 }}
-      style={StyleSheet.absoluteFill}
-    />
-  );
-}
+import { BG } from '../theme/ui';
 
 /**
- * The subject-tinted background: the same wash as Home, at the same angle and
- * stops, tinted by whichever subject the student is inside. Changing `color`
- * cross-fades the new wash in over the old one.
+ * The page every screen sits on: flat near-black, edge to edge.
+ *
+ * This used to be a subject-tinted wash — a gradient from the area's colour
+ * down to black, cross-fading whenever the student changed subject. It is flat
+ * now, and that is the point of the system: a wash is brightest at the top of
+ * the screen, so the same card read as two different shades depending on how
+ * far you had scrolled, and a translucent card over it came out darker than the
+ * page lower down. Solid cards on a flat page hold their weight anywhere.
+ *
+ * `color` is still accepted, and still passed by every screen, because a screen
+ * declaring which area it belongs to is worth keeping — the tint drives the
+ * accent marks (subject badges, segmented pills, chapter dots) that now carry
+ * that job on their own. Nothing paints it full-bleed any more.
  */
-export default function SubjectBackdrop({ color }: { color: string }) {
-  // `from` is the colour being replaced; it sits underneath until the fade ends.
-  const [pair, setPair] = useState({ from: color, to: color });
-  const phase = useSharedValue(1);
-
-  useEffect(() => {
-    if (color === pair.to) return;
-    setPair({ from: pair.to, to: color });
-    phase.value = 0;
-    phase.value = withTiming(1, { duration: FADE_DURATION, easing: FAST_OUT_SLOW_IN });
-  }, [color]);
-
-  const incoming = useAnimatedStyle(() => ({ opacity: phase.value }));
-
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Wash color={pair.from} />
-      <Animated.View style={[StyleSheet.absoluteFill, incoming]}>
-        <Wash color={pair.to} />
-      </Animated.View>
-    </View>
-  );
+export default function SubjectBackdrop({ color: _color }: { color: string }) {
+  return <View style={styles.page} pointerEvents="none" />;
 }
+
+const styles = StyleSheet.create({
+  // Written out rather than spread from `StyleSheet.absoluteFill`, which is a
+  // registered style rather than a plain object on some versions.
+  page: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: BG },
+});

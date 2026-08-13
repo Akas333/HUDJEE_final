@@ -25,13 +25,11 @@ import { useHomeStore } from '../../store/homeStore';
 import { typography } from '../../theme/typography';
 import { CHALLENGE_TINT } from '../../theme/challenges';
 import {
-  CAUTION,
   enter,
   GAP,
   GLASS,
   GLASS_BORDER,
-  GRADIENT,
-  POSITIVE,
+  ACCENT,
   PROFILE_TINT,
   RADIUS,
   SURFACE,
@@ -106,7 +104,7 @@ export default function ProfileScreen({ navigation }: any) {
 
             {snapshot?.readinessBand ? (
               <View style={styles.bandPill}>
-                <Gauge color={GRADIENT[0]} size={12} strokeWidth={2.2} />
+                <Gauge color={TEXT_MUTED} size={12} strokeWidth={2.2} />
                 <Text style={styles.bandText} numberOfLines={1}>
                   {snapshot.readinessBand}
                 </Text>
@@ -126,21 +124,18 @@ export default function ProfileScreen({ navigation }: any) {
           value={streak}
           caption={snapshot?.streakDays === 1 ? 'day' : 'days'}
           icon={Flame}
-          accent={CAUTION}
         />
         <StatTile
           label="Accuracy"
           value={accuracy}
           caption="all time"
           icon={Target}
-          accent={POSITIVE}
         />
         <StatTile
           label="Readiness"
           value={readiness}
           caption={snapshot?.readinessBand?.toLowerCase()}
           icon={Trophy}
-          accent={GRADIENT[1]}
         />
       </Animated.View>
 
@@ -151,7 +146,6 @@ export default function ProfileScreen({ navigation }: any) {
       <SettingsGroup index={4}>
         <SettingsRow
           icon={BookOpen}
-          accent={CHALLENGE_TINT}
           title="Mistake notebook"
           subtitle="Everything that caught you out, ready to re-practise"
           onPress={() => navigation.navigate('MistakeNotebookScreen')}
@@ -164,7 +158,6 @@ export default function ProfileScreen({ navigation }: any) {
         />
         <SettingsRow
           icon={Swords}
-          accent={CHALLENGE_TINT}
           title="Challenge history"
           subtitle="Every challenge that has closed"
           onPress={() =>
@@ -212,13 +205,13 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: `${GRADIENT[0]}1F`,
+    backgroundColor: `${ACCENT}1F`,
     borderWidth: 1,
-    borderColor: `${GRADIENT[0]}3D`,
+    borderColor: `${ACCENT}3D`,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: { color: GRADIENT[0], fontSize: 22, fontFamily: typography.bold },
+  avatarText: { color: ACCENT, fontSize: 22, fontFamily: typography.bold },
   identityText: { flex: 1, gap: 3 },
   name: { color: TEXT, fontSize: 17, fontFamily: typography.semiBold, letterSpacing: -0.3 },
   handle: { color: TEXT_FAINT, fontSize: 12, fontFamily: typography.regular },
@@ -229,11 +222,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: `${GRADIENT[0]}14`,
+    backgroundColor: `${ACCENT}14`,
     borderWidth: 1,
-    borderColor: `${GRADIENT[0]}30`,
+    borderColor: `${ACCENT}30`,
   },
-  bandText: { color: GRADIENT[0], fontSize: 11, fontFamily: typography.semiBold },
+  bandText: { color: ACCENT, fontSize: 11, fontFamily: typography.semiBold },
 
   statsRow: { flexDirection: 'row', gap: GAP, marginBottom: 30 },
   sectionSpacer: { marginTop: 2 },

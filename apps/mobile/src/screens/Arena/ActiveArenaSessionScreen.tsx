@@ -13,6 +13,7 @@ import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { Check, Clock, Lock, SkipForward, Target, X } from 'lucide-react-native';
 
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -23,6 +24,7 @@ import {
   GUTTER,
   MODE_BY_ID,
   NEGATIVE,
+  ON_LIGHT,
   POSITIVE,
   RADIUS,
   SUBJECT_LABELS,
@@ -215,7 +217,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
   if (status === 'starting' || status === 'idle') {
     return shell(
       <View style={styles.centered}>
-        <ActivityIndicator color={POSITIVE} size="large" />
+        <ActivityIndicator color={TEXT_MUTED} size="large" />
         <Text style={styles.centeredText}>Setting up your contexts…</Text>
       </View>
     );
@@ -236,7 +238,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
   if (status === 'ending') {
     return shell(
       <View style={styles.centered}>
-        <ActivityIndicator color={POSITIVE} size="large" />
+        <ActivityIndicator color={TEXT_MUTED} size="large" />
         <Text style={styles.centeredText}>Wrapping up…</Text>
       </View>
     );
@@ -324,7 +326,7 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
       {/* ── The question ── */}
       {active?.status === 'loading' ? (
         <View style={styles.centered}>
-          <ActivityIndicator color={accent} />
+          <ActivityIndicator color={TEXT_MUTED} />
         </View>
       ) : active?.status === 'exhausted' || !active?.question ? (
         <View style={styles.centered}>
@@ -399,31 +401,19 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
                 <Text style={styles.skipText}>Skip</Text>
               </PressableScale>
 
-              <PressableScale
+              <GradientButton
+                label="Submit"
                 onPress={submit}
                 disabled={active.selectedOption === null}
-                scaleTo={0.97}
-                style={[
-                  styles.submitButton,
-                  { backgroundColor: active.selectedOption === null ? SURFACE_STRONG : accent },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.submitText,
-                    { color: active.selectedOption === null ? TEXT_FAINT : '#0B0B0C' },
-                  ]}
-                >
-                  Submit
-                </Text>
-              </PressableScale>
+                height={52}
+                radius={999}
+                style={styles.submitButton}
+              />
             </>
           )}
 
           {answered && active.correct === false && (
-            <PressableScale onPress={advance} scaleTo={0.97} style={[styles.submitButton, styles.nextButton]}>
-              <Text style={[styles.submitText, { color: '#0B0B0C' }]}>Next question</Text>
-            </PressableScale>
+            <GradientButton label="Next question" onPress={advance} height={52} radius={999} block />
           )}
 
           {answered && active.correct === true && (
@@ -451,16 +441,16 @@ export default function ActiveArenaSessionScreen({ navigation, route }: any) {
               >
                 <Text style={[styles.modalButtonText, { color: TEXT }]}>Keep going</Text>
               </PressableScale>
-              <PressableScale
+              <GradientButton
+                label="End session"
                 onPress={() => {
                   setConfirmExit(false);
                   end('manual');
                 }}
-                scaleTo={0.96}
-                style={[styles.modalButton, { backgroundColor: accent }]}
-              >
-                <Text style={[styles.modalButtonText, { color: '#0B0B0C' }]}>End session</Text>
-              </PressableScale>
+                height={48}
+                radius={999}
+                style={styles.modalButton}
+              />
             </View>
           </View>
         </View>
@@ -610,8 +600,7 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE,
   },
   skipText: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.semiBold },
-  submitButton: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 999 },
-  nextButton: { backgroundColor: '#F5F5F7' },
+  submitButton: { flex: 1 },
   submitText: { fontSize: 15, fontFamily: typography.bold, letterSpacing: -0.2 },
   correctBanner: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16 },
   correctText: { color: POSITIVE, fontSize: 14, fontFamily: typography.bold },
@@ -638,6 +627,6 @@ const styles = StyleSheet.create({
   modalTitle: { color: TEXT, fontSize: 18, fontFamily: typography.bold, marginBottom: 8 },
   modalText: { color: TEXT_MUTED, fontSize: 14, fontFamily: typography.regular, lineHeight: 20 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 22 },
-  modalButton: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 999 },
+  modalButton: { flex: 1 },
   modalButtonText: { fontSize: 14, fontFamily: typography.bold },
 });

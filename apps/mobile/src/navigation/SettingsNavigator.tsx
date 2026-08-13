@@ -8,6 +8,7 @@ import PrivacyFriendsScreen from '../screens/Settings/PrivacyFriendsScreen';
 import DataResetScreen from '../screens/Settings/DataResetScreen';
 import HelpSupportScreen from '../screens/Settings/HelpSupportScreen';
 import AboutScreen from '../screens/Settings/AboutScreen';
+import { BG } from '../theme/ui';
 
 export type SettingsStackParamList = {
   SettingsScreen: undefined;
@@ -24,7 +25,7 @@ const Stack = createNativeStackNavigator<SettingsStackParamList>();
 
 export default function SettingsNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: BG } }}>
       <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
       <Stack.Screen name="AccountScreen" component={AccountScreen} />
       <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} />

@@ -11,8 +11,8 @@ import { useToastStore } from '../../services/ToastService';
 import { HapticService } from '../../services/HapticService';
 import { typography } from '../../theme/typography';
 import {
-  enter,
-  GOLD,
+  GLASS,
+  GLASS_BORDER,
   PROFILE_TINT,
   RADIUS,
   SURFACE,
@@ -20,6 +20,7 @@ import {
   TEXT,
   TEXT_FAINT,
   TEXT_MUTED,
+  enter,
 } from '../../theme/ui';
 
 const VERSION = '2.0.0';
@@ -81,7 +82,6 @@ export default function AboutScreen({ navigation }: any) {
       <SettingsGroup label="If you like it" index={2}>
         <SettingsRow
           icon={Star}
-          accent={GOLD}
           title="Rate HudJee"
           subtitle="Takes a moment, helps more than you would think"
           onPress={() => {
@@ -120,9 +120,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: GLASS,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: GLASS_BORDER,
   },
   versionText: { color: TEXT_MUTED, fontSize: 11, fontFamily: typography.medium },
   colophon: {

@@ -27,6 +27,8 @@ import {
   SECTION_GAP,
   SURFACE,
   SURFACE_BORDER,
+  SURFACE_STRONG,
+  SURFACE_SUBTLE,
   TEXT,
   TEXT_FAINT,
   TEXT_MUTED,
@@ -180,7 +182,7 @@ export default function ManageFriendsScreen({ navigation }: any) {
                           onPress={() => onRespond(friend.friendshipId, true, displayName(friend.username))}
                           accessibilityLabel={`Accept ${displayName(friend.username)}`}
                         >
-                          <Check color="#0B0B0C" size={16} strokeWidth={2.6} />
+                          <Check color={TEXT} size={16} strokeWidth={2.6} />
                         </PressableScale>
                       </View>
                     )}
@@ -257,7 +259,7 @@ export default function ManageFriendsScreen({ navigation }: any) {
                         }
                         accessibilityLabel={`Challenge ${displayName(friend.username)}`}
                       >
-                        <Swords color="#0B0B0C" size={15} strokeWidth={2.2} />
+                        <Swords color={TEXT} size={15} strokeWidth={2.2} />
                       </PressableScale>
                     </View>
                   </PressableScale>
@@ -342,7 +344,7 @@ export default function ManageFriendsScreen({ navigation }: any) {
                         onPress={() => onAdd(profile)}
                         accessibilityLabel={`Send a request to ${displayName(profile.username)}`}
                       >
-                        <UserPlus color="#0B0B0C" size={16} strokeWidth={2.2} />
+                        <UserPlus color={TEXT} size={16} strokeWidth={2.2} />
                       </PressableScale>
                     )}
                   </View>
@@ -392,7 +394,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     borderWidth: 1,
     borderColor: SURFACE_BORDER,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: SURFACE_SUBTLE,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -404,7 +406,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F5F5F7',
+    backgroundColor: SURFACE_STRONG,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -412,7 +414,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F5F5F7',
+    backgroundColor: SURFACE_STRONG,
     justifyContent: 'center',
     alignItems: 'center',
   },

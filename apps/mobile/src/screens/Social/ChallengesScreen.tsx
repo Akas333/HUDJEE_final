@@ -15,6 +15,7 @@ import { Bell, ChevronRight, Plus, Swords, UserPlus, Users } from 'lucide-react-
 import PressableScale from '../../components/PressableScale';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import Skeleton from '../../components/Skeleton';
+import SegmentIndicator from '../../components/ui/SegmentIndicator';
 import Avatar from '../../components/challenges/Avatar';
 import ChallengeTicket from '../../components/challenges/ChallengeTicket';
 import LedgerRow from '../../components/challenges/LedgerRow';
@@ -26,12 +27,16 @@ import { withAlpha } from '../../theme/subjects';
 import {
   AT_RISK,
   CHALLENGE_TINT,
+  DOT,
   GAP,
+  GLASS,
+  GLASS_BORDER,
   GUTTER,
   RADIUS,
   SECTION_GAP,
   SURFACE,
   SURFACE_BORDER,
+  SURFACE_SUBTLE,
   TEXT,
   TEXT_FAINT,
   TEXT_MUTED,
@@ -72,7 +77,9 @@ function ScopeTabs({ active, onChange }: { active: number; onChange: (i: number)
 
   return (
     <View style={styles.segment}>
-      <Animated.View style={[styles.segmentIndicator, indicator]} />
+      <Animated.View style={[styles.segmentIndicator, indicator]}>
+        <SegmentIndicator />
+      </Animated.View>
       {SCOPES.map((scope, i) => (
         <ScopeTab
           key={scope}
@@ -497,9 +504,9 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: GLASS,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: GLASS_BORDER,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -535,7 +542,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: SURFACE_BORDER,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: SURFACE_SUBTLE,
   },
   retryText: { color: TEXT, fontSize: 13, fontFamily: typography.semiBold },
 
@@ -548,7 +555,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginBottom: GAP,
   },
-  riskText: { color: '#F5DFAE', fontSize: 13, fontFamily: typography.semiBold },
+  riskText: { color: TEXT, fontSize: 13, fontFamily: typography.semiBold },
 
   streakCard: {
     flexDirection: 'row',
@@ -572,7 +579,7 @@ const styles = StyleSheet.create({
   streakCaption: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.regular, marginTop: 6, lineHeight: 18 },
   streakMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' },
   streakMetaText: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },
-  metaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.18)' },
+  metaDivider: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: DOT },
 
   section: { marginBottom: SECTION_GAP },
   sectionHeader: {
@@ -589,10 +596,10 @@ const styles = StyleSheet.create({
   segment: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: GLASS,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: GLASS_BORDER,
     padding: SEG_PAD,
     marginBottom: 12,
   },
@@ -602,10 +609,6 @@ const styles = StyleSheet.create({
     top: SEG_PAD,
     bottom: SEG_PAD,
     width: SEG_WIDTH,
-    borderRadius: 999,
-    borderWidth: 1,
-    backgroundColor: withAlpha(CHALLENGE_TINT, 0.28),
-    borderColor: withAlpha(CHALLENGE_TINT, 0.5),
   },
   segmentTab: { width: SEG_WIDTH, paddingVertical: 10, alignItems: 'center' },
   segmentLabel: { fontSize: 14, fontFamily: typography.semiBold, letterSpacing: -0.1 },
@@ -645,7 +648,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: SURFACE_SUBTLE,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 14,

@@ -13,19 +13,22 @@ import Animated, {
 
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import Skeleton from '../../components/Skeleton';
+import SegmentIndicator from '../../components/ui/SegmentIndicator';
 import ChallengeHeader from '../../components/challenges/ChallengeHeader';
 import LedgerRow from '../../components/challenges/LedgerRow';
 import { HapticService } from '../../services/HapticService';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { withAlpha } from '../../theme/subjects';
 import {
   CHALLENGE_TINT,
+  GLASS,
+  GLASS_BORDER,
   GUTTER,
   RADIUS,
   SECTION_GAP,
   SURFACE,
   SURFACE_BORDER,
+  SURFACE_SUBTLE,
   TEXT,
   TEXT_FAINT,
   TEXT_MUTED,
@@ -119,7 +122,9 @@ export default function LeaderBoardScreen({ navigation }: any) {
           />
 
           <Animated.View entering={enter(2)} style={styles.segment}>
-            <Animated.View style={[styles.segmentIndicator, indicator]} />
+            <Animated.View style={[styles.segmentIndicator, indicator]}>
+              <SegmentIndicator />
+            </Animated.View>
             {SCOPES.map((s, i) => (
               <ScopeTab
                 key={s}
@@ -208,10 +213,10 @@ const styles = StyleSheet.create({
   segment: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: GLASS,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
+    borderColor: GLASS_BORDER,
     padding: SEG_PAD,
     marginBottom: 20,
   },
@@ -221,10 +226,6 @@ const styles = StyleSheet.create({
     top: SEG_PAD,
     bottom: SEG_PAD,
     width: SEG_WIDTH,
-    borderRadius: 999,
-    borderWidth: 1,
-    backgroundColor: withAlpha(CHALLENGE_TINT, 0.28),
-    borderColor: withAlpha(CHALLENGE_TINT, 0.5),
   },
   segmentTab: { width: SEG_WIDTH, paddingVertical: 11, alignItems: 'center' },
   segmentLabel: { fontSize: 14, fontFamily: typography.semiBold, letterSpacing: -0.1 },
@@ -263,7 +264,7 @@ const styles = StyleSheet.create({
   },
 
   noteCard: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: SURFACE_SUBTLE,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: SURFACE_BORDER,

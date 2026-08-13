@@ -9,7 +9,7 @@ import SettingsGroup from '../../components/settings/SettingsGroup';
 import SettingsRow from '../../components/settings/SettingsRow';
 import SettingsToggle from '../../components/settings/SettingsToggle';
 import { useSettingsStore } from '../../store/settingsStore';
-import { CAUTION, GRADIENT, POSITIVE, PROFILE_TINT } from '../../theme/ui';
+import { PROFILE_TINT } from '../../theme/ui';
 import { CHALLENGE_TINT } from '../../theme/challenges';
 
 // The old version of this screen threw a "Stay on track" modal over itself on
@@ -34,7 +34,6 @@ export function NotificationsScreen() {
       <SettingsGroup label="Keeping momentum" index={0}>
         <SettingsToggle
           icon={Flame}
-          accent={CAUTION}
           title="Streak reminders"
           subtitle="Only when the day is nearly out and the streak is live"
           value={notifications.streak}
@@ -42,7 +41,6 @@ export function NotificationsScreen() {
         />
         <SettingsToggle
           icon={Pencil}
-          accent={GRADIENT[1]}
           title="Daily practice reminder"
           subtitle="One nudge at your usual practice time"
           value={notifications.practice}
@@ -53,7 +51,6 @@ export function NotificationsScreen() {
       <SettingsGroup label="Other people" index={1}>
         <SettingsToggle
           icon={Swords}
-          accent={CHALLENGE_TINT}
           title="Challenge activity"
           subtitle="Someone challenges you, or answers one of yours"
           value={notifications.challenge}
@@ -61,7 +58,6 @@ export function NotificationsScreen() {
         />
         <SettingsToggle
           icon={TrendingUp}
-          accent={POSITIVE}
           title="Arena rating changes"
           subtitle="When a session moves your rating"
           value={notifications.arena}

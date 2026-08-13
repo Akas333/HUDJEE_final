@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { BellOff, Swords, UserMinus } from 'lucide-react-native';
 
 import PressableScale from '../../components/PressableScale';
+import GradientButton from '../../components/ui/GradientButton';
 import SubjectBackdrop from '../../components/SubjectBackdrop';
 import Avatar from '../../components/challenges/Avatar';
 import ChallengeHeader from '../../components/challenges/ChallengeHeader';
@@ -18,10 +19,12 @@ import {
   CHALLENGE_TINT,
   GAP,
   GUTTER,
+  ON_LIGHT,
   RADIUS,
   SECTION_GAP,
   SURFACE,
   SURFACE_BORDER,
+  SURFACE_SUBTLE,
   TEXT,
   TEXT_FAINT,
   TEXT_MUTED,
@@ -125,14 +128,15 @@ export default function FriendProfileScreen({ navigation, route }: any) {
           {/* Actions */}
           {isFriend ? (
             <Animated.View entering={enter(3)} style={styles.actionRow}>
-              <PressableScale
-                scaleTo={0.97}
-                style={styles.primaryButton}
+              <GradientButton
+                label="Challenge"
+                icon={<Swords color="#FFFFFF" size={16} strokeWidth={2.2} />}
+                iconSide="leading"
                 onPress={() => navigation.navigate('ChallengeCompose', { opponentId: userId })}
-              >
-                <Swords color="#0B0B0C" size={16} strokeWidth={2.2} />
-                <Text style={styles.primaryText}>Challenge</Text>
-              </PressableScale>
+                height={50}
+                radius={999}
+                style={styles.primaryButton}
+              />
 
               <PressableScale
                 scaleTo={0.94}
@@ -235,17 +239,7 @@ const styles = StyleSheet.create({
   },
 
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: GAP },
-  primaryButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 15,
-    borderRadius: 999,
-    backgroundColor: '#F5F5F7',
-  },
-  primaryText: { color: '#0B0B0C', fontSize: 14, fontFamily: typography.bold },
+  primaryButton: { flex: 1 },
   iconButton: {
     width: 50,
     height: 50,
@@ -262,7 +256,7 @@ const styles = StyleSheet.create({
   },
 
   mutedCard: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: SURFACE_SUBTLE,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: SURFACE_BORDER,

@@ -7,11 +7,10 @@ import { colors } from '../../theme/colors';
 import { GUTTER, PROFILE_TINT } from '../../theme/ui';
 
 /**
- * The frame every screen in the app sits in: the near-black base, a tinted wash
- * over it, and a 24pt gutter. Screens used to re-type this four-deep nesting
- * each time, and the ones that skipped it — Settings, Profile — ended up flat
- * black while everything around them had a wash, which is exactly how a screen
- * ends up looking like it belongs to a different app.
+ * The frame every screen in the app sits in: the flat near-black page and a
+ * 24pt gutter. Screens used to re-type this four-deep nesting each time, and
+ * the ones that skipped it — Settings, Profile — ended up looking like they
+ * belonged to a different app.
  *
  * Pass `scroll={false}` when the screen owns its own scroller (a FlatList, a
  * fixed-footer layout); the backdrop and safe area still apply.
@@ -24,7 +23,9 @@ export default function Screen({
   footer,
 }: {
   children: React.ReactNode;
-  /** The colour of the backdrop wash. One per area of the app — see theme/ui. */
+  /** The area this screen belongs to. No longer painted full-bleed — see
+   *  `SubjectBackdrop` — but still declared, and still what an area's accent
+   *  marks are drawn from. */
   tint?: string;
   scroll?: boolean;
   contentStyle?: ViewStyle;

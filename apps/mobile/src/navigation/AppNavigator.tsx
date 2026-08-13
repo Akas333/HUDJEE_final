@@ -8,6 +8,7 @@ import SettingsNavigator from './SettingsNavigator';
 import AdaptiveSessionScreen from '../screens/Learn/AdaptiveSessionScreen';
 import { useAuthStore } from '../store/authStore';
 import { supabase } from '../lib/supabase';
+import { BG } from '../theme/ui';
 
 export type RootStackParamList = {
   Auth: undefined;
@@ -46,7 +47,7 @@ export default function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#0B0B0C' } }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: BG } }}>
         {session ? (
           <>
             <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
