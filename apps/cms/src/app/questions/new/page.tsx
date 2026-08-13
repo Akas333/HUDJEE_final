@@ -1,697 +1,752 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  RotateCcw,
+  Save,
+  Sparkles,
+  Wand2,
+} from 'lucide-react';
 import { Toast } from '@/components/Toast';
-import { ImageIcon, Wand2, Loader2 } from 'lucide-react';
-import WatermarkImage from '@/components/WatermarkImage';
+import { supabase } from '@/lib/supabase';
+import LatexField from '@/components/questions/LatexField';
+import OptionsEditor from '@/components/questions/OptionsEditor';
+import MatrixEditor from '@/components/questions/MatrixEditor';
+import NumericAnswer from '@/components/questions/NumericAnswer';
+import TaxonomyPicker from '@/components/questions/TaxonomyPicker';
+import QuestionPreview from '@/components/questions/QuestionPreview';
+import {
+  ASSERTION_REASON_OPTIONS,
+  AUTHOR_BUCKETS,
+  DIFFICULTIES,
+  FORMAT_HINTS,
+  FORMAT_LABELS,
+  PYQ_PAPERS,
+  QUESTION_FORMATS,
+  blockingIssues,
+  draftFromRow,
+  emptyDraft,
+  issuesByField,
+  newOptionId,
+  serializeQuestion,
+  usesMatrix,
+  usesNumeric,
+  usesOptions,
+  validateQuestion,
+  type QuestionDraft,
+  type QuestionFormat,
+} from '@/lib/questionSchema';
+
+/**
+ * Where an in-progress new question is parked. Authoring one question can take ten
+ * minutes of typing LaTeX; before this, a refresh or a stray back-navigation threw
+ * all of it away. Edit mode deliberately does not autosave — restoring a stale local
+ * copy over a freshly fetched row would quietly resurrect old content.
+ */
+const DRAFT_KEY = 'hudjee-cms:question-draft';
+
+/** The fields that carry over to the next question in a batch. */
+function carryOver(draft: QuestionDraft): QuestionDraft {
+  return emptyDraft({
+    subject: draft.subject,
+    chapter_id: draft.chapter_id,
+    concept_id: draft.concept_id,
+    format: draft.format,
+    difficulty: draft.difficulty,
+    source_type: draft.source_type,
+    pyq_year: draft.pyq_year,
+    pyq_paper: draft.pyq_paper,
+    pyq_shift: draft.pyq_shift,
+    published: draft.published,
+    // The four standard choices are part of the format, not of the last question.
+    ...(draft.format === 'assertion_reason'
+      ? { options: ASSERTION_REASON_OPTIONS.map((text) => ({ id: newOptionId(), text })) }
+      : {}),
+  });
+}
 
 function NewQuestionForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const editId = searchParams.get('id');
-  const initialConceptId = searchParams.get('concept_id');
-  const initialChapterId = searchParams.get('chapter_id');
-  const initialSubject = searchParams.get('subject');
+  const isEditing = Boolean(editId);
 
-  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
-  
-  const [chapters, setChapters] = useState<any[]>([]);
-  const [topics, setTopics] = useState<any[]>([]);
-  const [isLoadingChapters, setIsLoadingChapters] = useState(true);
-  
-  const [formData, setFormData] = useState({
-    subject: initialSubject || 'physics',
-    chapter_id: initialChapterId || '',
-    concept_id: initialConceptId || '',
-    format: 'mcq_single',
-    difficulty: 'medium',
-    source_type: 'non_pyq',
-    pyq_year: '',
-    pyq_paper: '',
-    pyq_shift: '',
-    question_body: '',
-    correct_answer: '',
-    solution: '',
-    published: false,
-    author_difficulty_bucket: '',
-    author_prior_b: 0,
-  });
+  const [draft, setDraft] = useState<QuestionDraft>(() =>
+    emptyDraft({
+      subject: searchParams.get('subject') || 'physics',
+      chapter_id: searchParams.get('chapter_id') || '',
+      concept_id: searchParams.get('concept_id') || '',
+    })
+  );
 
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(isEditing);
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+  const [recoverable, setRecoverable] = useState<QuestionDraft | null>(null);
 
-  const [options, setOptions] = useState<{ id: string; text: string; image_url?: string }[]>([{ id: '1', text: '' }, { id: '2', text: '' }]);
-  
-  // Matrix specific state
-  const [matrixLeft, setMatrixLeft] = useState([{ id: 'A', text: '' }, { id: 'B', text: '' }, { id: 'C', text: '' }, { id: 'D', text: '' }]);
-  const [matrixRight, setMatrixRight] = useState([{ id: 'P', text: '' }, { id: 'Q', text: '' }, { id: 'R', text: '' }, { id: 'S', text: '' }, { id: 'T', text: '' }]);
-  const [matrixMatches, setMatrixMatches] = useState<Record<string, string[]>>({ 'A': [], 'B': [], 'C': [], 'D': [] });
+  const bodyAnchorRef = useRef<HTMLDivElement>(null);
 
-  // History tracking for Undo/Redo
-  const [history, setHistory] = useState<any[]>([]);
-  const [pointer, setPointer] = useState(-1);
+  const issues = useMemo(() => validateQuestion(draft), [draft]);
+  const errors = useMemo(() => blockingIssues(issues), [issues]);
+  const fieldIssues = useMemo(() => issuesByField(issues), [issues]);
 
-  // Capture initial state
-  useEffect(() => {
-    if (pointer === -1) {
-      setHistory([{ formData, options }]);
-      setPointer(0);
-    }
+  /** Only surface a field-level error once the author has tried to save. */
+  const errorFor = (field: keyof typeof fieldIssues) => {
+    const issue = fieldIssues[field];
+    return attempted && issue?.severity === 'error' ? issue.message : undefined;
+  };
+  const warningFor = (field: keyof typeof fieldIssues) => {
+    const issue = fieldIssues[field];
+    return issue?.severity === 'warning' ? issue.message : undefined;
+  };
+
+  const patch = useCallback((update: Partial<QuestionDraft>) => {
+    setDraft((prev) => ({ ...prev, ...update }));
   }, []);
 
-  // Save history state (call this on significant changes, e.g. blur or format change)
-  const pushHistory = (newFormData: any, newOptions: any) => {
-    setHistory(prev => {
-      const newHistory = prev.slice(0, pointer + 1);
-      newHistory.push({ formData: newFormData, options: newOptions });
-      if (newHistory.length > 30) newHistory.shift(); // Keep last 30 states
-      return newHistory;
-    });
-    setPointer(prev => Math.min(prev + 1, 30));
-  };
+  // ─── load (edit mode) ──────────────────────────────────────────────────────
 
-  // Keyboard Shortcuts
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
-      
-      // Save: Ctrl/Cmd + S
-      if (cmdOrCtrl && e.key === 's') {
-        e.preventDefault();
-        const form = document.getElementById('question-form') as HTMLFormElement;
-        if (form) form.requestSubmit();
-      }
-      
-      // Undo/Redo only if we aren't actively typing in a text field (let native undo handle text)
-      const activeTag = document.activeElement?.tagName.toLowerCase();
-      const isTyping = activeTag === 'input' || activeTag === 'textarea';
+    if (!editId) return;
+    let cancelled = false;
 
-      // Undo: Ctrl/Cmd + Z
-      if (cmdOrCtrl && e.key === 'z' && !e.shiftKey) {
-        if (!isTyping) {
-          e.preventDefault();
-          if (pointer > 0) {
-            const prevState = history[pointer - 1];
-            setFormData(prevState.formData);
-            setOptions(prevState.options);
-            setPointer(pointer - 1);
-            setToast({ message: 'Undo', type: 'success' });
-          }
-        }
+    (async () => {
+      try {
+        const res = await fetch(`/api/questions/${editId}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data?.error) throw new Error(data.error);
+        setDraft(draftFromRow(data));
+      } catch (err: any) {
+        if (!cancelled) setToast({ message: err?.message || 'Could not load question.', type: 'error' });
+      } finally {
+        if (!cancelled) setIsLoading(false);
       }
-      
-      // Redo: Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y
-      if ((cmdOrCtrl && e.key === 'z' && e.shiftKey) || (cmdOrCtrl && e.key === 'y')) {
-        if (!isTyping) {
-          e.preventDefault();
-          if (pointer < history.length - 1) {
-            const nextState = history[pointer + 1];
-            setFormData(nextState.formData);
-            setOptions(nextState.options);
-            setPointer(pointer + 1);
-            setToast({ message: 'Redo', type: 'success' });
-          }
-        }
-      }
+    })();
+
+    return () => {
+      cancelled = true;
     };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [history, pointer]);
-
-  useEffect(() => {
-    if (editId) {
-      fetchQuestionData(editId);
-    }
   }, [editId]);
 
-  const fetchQuestionData = async (id: string) => {
-    const res = await fetch(`/api/questions/${id}`);
-    const data = await res.json();
-    if (data && !data.error) {
-      setFormData({
-        subject: data.subject || 'physics',
-        chapter_id: data.chapter_id || '',
-        concept_id: data.concept_id || '',
-        format: data.format || 'mcq_single',
-        difficulty: data.difficulty || 'medium',
-        source_type: data.source_type || 'non_pyq',
-        pyq_year: data.pyq_year?.toString() || '',
-        pyq_paper: data.pyq_paper?.toString() || '',
-        pyq_shift: data.pyq_shift?.toString() || '',
-        question_body: data.question_body || '',
-        correct_answer: data.correct_answer || '',
-        solution: data.solution || '',
-        published: data.published || false,
-        author_difficulty_bucket: data.author_difficulty_bucket || '',
-        author_prior_b: data.author_prior_b || 0,
-      });
-      if (data.options && Array.isArray(data.options)) {
-        setOptions(data.options);
-      } else if (data.options && data.options.type === 'matrix') {
-        setMatrixLeft(data.options.left || []);
-        setMatrixRight(data.options.right || []);
-        // parse correct_answer string "A:P,Q; B:R" into matrixMatches
-        const matches: Record<string, string[]> = {};
-        data.options.left?.forEach((l: any) => matches[l.id] = []);
-        if (data.correct_answer) {
-          data.correct_answer.split(';').forEach((pair: string) => {
-            const [leftId, rightStr] = pair.split(':').map(s => s.trim());
-            if (leftId && rightStr) {
-              matches[leftId] = rightStr.split(',').map(s => s.trim()).filter(Boolean);
-            }
-          });
-        }
-        setMatrixMatches(matches);
-      }
-    }
-  };
+  // ─── autosave (new questions only) ─────────────────────────────────────────
 
   useEffect(() => {
-    fetchChapters();
-  }, [formData.subject]);
+    if (isEditing) return;
+    try {
+      const stored = window.localStorage.getItem(DRAFT_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as QuestionDraft;
+      if (parsed?.question_body?.trim()) setRecoverable(parsed);
+    } catch {
+      // A malformed draft is not worth surfacing — drop it.
+      window.localStorage.removeItem(DRAFT_KEY);
+    }
+  }, [isEditing]);
 
-  const handleImagePaste = async (e: React.ClipboardEvent, onUploadSuccess: (url: string) => void) => {
-    const items = e.clipboardData.items;
-    const imageItem = Array.from(items).find(item => item.type.startsWith('image/'));
-    
-    if (imageItem) {
-      e.preventDefault();
-      const file = imageItem.getAsFile();
-      if (!file) return;
-
-      setIsUploadingImage(true);
-      setToast({ message: 'Uploading pasted image...', type: 'success' });
-      
+  useEffect(() => {
+    if (isEditing || isLoading) return;
+    // Debounced so a long body is not re-serialized on every keystroke.
+    const timer = setTimeout(() => {
       try {
-        const fd = new FormData();
-        fd.append('image', file);
-        const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        
-        onUploadSuccess(data.url);
-        setToast({ message: 'Pasted image uploaded successfully!', type: 'success' });
-      } catch (err: any) {
-        setToast({ message: err.message, type: 'error' });
-      } finally {
-        setIsUploadingImage(false);
+        if (draft.question_body.trim()) {
+          window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        }
+      } catch {
+        // Storage full or blocked — autosave is a convenience, not a guarantee.
       }
-    }
-  };
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [draft, isEditing, isLoading]);
+
+  // ─── save ──────────────────────────────────────────────────────────────────
+
+  const save = useCallback(
+    async (mode: 'close' | 'again') => {
+      setAttempted(true);
+
+      const blocking = blockingIssues(validateQuestion(draft));
+      if (blocking.length > 0) {
+        setToast({
+          message: `${blocking.length} thing${blocking.length === 1 ? '' : 's'} to fix before saving.`,
+          type: 'error',
+        });
+        return;
+      }
+
+      setIsSaving(true);
+      try {
+        const { data } = await supabase.auth.getSession();
+        const res = await fetch(editId ? `/api/questions/${editId}` : '/api/questions', {
+          method: editId ? 'PUT' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // Lets the route attribute the row to a real user instead of "Admin".
+            ...(data.session?.access_token
+              ? { Authorization: `Bearer ${data.session.access_token}` }
+              : {}),
+          },
+          body: JSON.stringify(serializeQuestion(draft)),
+        });
+
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload?.error || 'Save failed.');
+
+        window.localStorage.removeItem(DRAFT_KEY);
+
+        const queued = payload?.is_pending_review;
+        const verb = editId ? 'updated' : 'saved';
+        setToast({
+          message: queued ? `Question ${verb} and sent for review.` : `Question ${verb} and published.`,
+          type: 'success',
+        });
+
+        if (mode === 'again') {
+          setSavedCount((n) => n + 1);
+          setDraft(carryOver(draft));
+          setAttempted(false);
+          bodyAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          setTimeout(
+            () =>
+              router.push(
+                draft.concept_id ? `/questions?concept_id=${draft.concept_id}` : '/questions'
+              ),
+            900
+          );
+        }
+      } catch (err: any) {
+        setToast({ message: err?.message || 'Save failed.', type: 'error' });
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [draft, editId, router]
+  );
+
+  // ─── keyboard ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (formData.chapter_id) fetchTopics(formData.chapter_id);
-    else setTopics([]);
-  }, [formData.chapter_id]);
+    const onKeyDown = (e: KeyboardEvent) => {
+      const cmd = e.metaKey || e.ctrlKey;
+      if (!cmd) return;
 
-  const fetchChapters = async () => {
-    setIsLoadingChapters(true);
-    const res = await fetch('/api/chapters');
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      setChapters(data.filter((c: any) => c.subject === formData.subject));
-    } else {
-      console.error(data.error || 'Failed to fetch chapters');
-      setChapters([]);
-    }
-    setIsLoadingChapters(false);
-  };
-
-  const fetchTopics = async (chapterId: string) => {
-    const res = await fetch(`/api/topics?chapter_id=${chapterId}`);
-    const data = await res.json();
-    if (Array.isArray(data)) {
-      setTopics(data);
-    } else {
-      console.error(data.error || 'Failed to fetch topics');
-      setTopics([]);
-    }
-  };
-
-  const handleSubjectChange = (val: string) => {
-    setFormData({ ...formData, subject: val, chapter_id: '', concept_id: '' });
-  };
-
-  const handleChapterChange = (val: string) => {
-    setFormData({ ...formData, chapter_id: val, concept_id: '' });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Construct options payload
-    let finalOptions: any = null;
-    let finalCorrectAnswer = formData.correct_answer;
-
-    if (formData.format === 'matrix') {
-      finalOptions = { type: 'matrix', left: matrixLeft, right: matrixRight };
-      // Build correct answer string from matches (e.g. "A:P,Q; B:R")
-      finalCorrectAnswer = Object.entries(matrixMatches)
-        .map(([leftId, rightIds]) => rightIds.length > 0 ? `${leftId}:${rightIds.join(',')}` : null)
-        .filter(Boolean)
-        .join('; ');
-    } else if (formData.format.includes('mcq')) {
-      finalOptions = options;
-    }
-
-    const payload = {
-      ...formData,
-      correct_answer: finalCorrectAnswer,
-      options: finalOptions,
-      pyq_year: formData.pyq_year ? parseInt(formData.pyq_year) : null,
-      pyq_paper: formData.pyq_paper ? parseInt(formData.pyq_paper) : null,
-      pyq_shift: formData.pyq_shift ? parseInt(formData.pyq_shift) : null,
-      author_difficulty_bucket: formData.author_difficulty_bucket || 'medium',
-      author_prior_b: formData.author_prior_b || 0,
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save(isEditing ? 'close' : 'again');
+      } else if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        save('close');
+      }
     };
 
-    const url = editId ? `/api/questions/${editId}` : '/api/questions';
-    const method = editId ? 'PUT' : 'POST';
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [save, isEditing]);
 
-    const res = await fetch(url, {
-      method,
-      body: JSON.stringify(payload),
-      headers: { 'Content-Type': 'application/json' },
+  // ─── format switching ──────────────────────────────────────────────────────
+
+  const changeFormat = (format: QuestionFormat) => {
+    setDraft((prev) => {
+      const next: QuestionDraft = { ...prev, format };
+
+      // Assertion-reason always uses the same four choices — prefill rather than
+      // make every author retype them, but never overwrite work already there.
+      if (format === 'assertion_reason' && prev.options.every((o) => !o.text.trim())) {
+        next.options = ASSERTION_REASON_OPTIONS.map((text) => ({ id: newOptionId(), text }));
+        next.correctIndices = [];
+      }
+
+      // Single-answer formats cannot carry a multi-select key over.
+      if (format !== 'mcq_multi' && prev.correctIndices.length > 1) {
+        next.correctIndices = prev.correctIndices.slice(0, 1);
+      }
+
+      return next;
     });
+  };
 
-    if (res.ok) {
-      setToast({ message: `Question ${editId ? 'updated' : 'created'} successfully!`, type: 'success' });
-      setTimeout(() => router.push(formData.concept_id ? `/questions?concept_id=${formData.concept_id}` : '/questions'), 1500);
-    } else {
-      let errorMessage = `Failed to ${editId ? 'update' : 'create'} question.`;
-      try {
-        const data = await res.json();
-        if (data.error) errorMessage = data.error;
-      } catch (e) {}
-      setToast({ message: errorMessage, type: 'error' });
+  const autoEvaluate = async () => {
+    setIsEvaluating(true);
+    try {
+      const res = await fetch('/api/evaluate-question', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question_body: draft.question_body,
+          options: usesOptions(draft.format) ? draft.options : null,
+          subject: draft.subject,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Evaluation failed.');
+
+      patch({
+        author_difficulty_bucket: data.author_difficulty_bucket,
+        author_prior_b: data.author_prior_b,
+      });
+      setToast({ message: 'Difficulty estimated.', type: 'success' });
+    } catch (err: any) {
+      setToast({ message: err?.message || 'Evaluation failed.', type: 'error' });
+    } finally {
+      setIsEvaluating(false);
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-zinc-500">
+        <Loader2 className="mr-3 animate-spin" size={20} /> Loading question…
+      </div>
+    );
+  }
+
+  const sectionClass = 'rounded-[20px] border border-[#262626] bg-[#161618] p-6';
+
   return (
-    <div className="max-w-[1000px] mx-auto pb-10">
-      <div className="mb-8">
-        <div className="inline-block px-3 py-1.5 rounded-full bg-[#1e2030] text-[#8692f7] text-[10px] font-bold uppercase tracking-widest mb-3">
-          Questions
+    <div className="mx-auto max-w-[1500px] pb-4">
+      {/* Header */}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <button
+            type="button"
+            onClick={() => router.push('/questions')}
+            className="mb-3 flex items-center gap-1.5 text-xs font-medium text-zinc-500 transition-colors hover:text-white"
+          >
+            <ArrowLeft size={14} /> All questions
+          </button>
+          <h1 className="text-3xl font-black text-white">
+            {isEditing ? 'Edit question' : 'Add question'}
+          </h1>
         </div>
-        <h1 className="text-3xl font-black text-white">{editId ? 'Edit Question' : 'Add New Question'}</h1>
+        {savedCount > 0 && (
+          <div className="flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-400">
+            <CheckCircle2 size={16} /> {savedCount} saved this session
+          </div>
+        )}
       </div>
 
-      <form id="question-form" onSubmit={handleSubmit} className="bg-[#161618] rounded-[24px] border border-[#262626] p-8 space-y-8">
-        {!initialConceptId && !editId && !isLoadingChapters && chapters.length === 0 && (
-          <div className="bg-amber-400/10 border border-amber-400/20 text-amber-400 px-4 py-3 rounded-xl flex items-center gap-3 text-sm">
-            <span className="font-semibold">No Chapters Found:</span> 
-            <span>You must create a chapter in this subject before adding questions.</span>
-          </div>
-        )}
-
-        {!initialConceptId && !editId && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">Subject</label>
-              <select value={formData.subject} onChange={e => handleSubjectChange(e.target.value)} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all">
-                <option value="physics">Physics</option>
-                <option value="chemistry">Chemistry</option>
-                <option value="maths">Maths</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">Chapter</label>
-              <select required value={formData.chapter_id} onChange={e => handleChapterChange(e.target.value)} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all">
-                <option value="">Select Chapter...</option>
-                {chapters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">Topic</label>
-              <select required value={formData.concept_id} onChange={e => setFormData({...formData, concept_id: e.target.value})} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all">
-                <option value="">Select Topic...</option>
-                {topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">Format</label>
-            <select value={formData.format} onChange={e => setFormData({...formData, format: e.target.value})} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all">
-              <option value="mcq_single">Single Correct (MCQ)</option>
-              <option value="mcq_multi">Multiple Correct</option>
-              <option value="integer">Integer Type</option>
-              <option value="numerical">Numeric Type</option>
-              <option value="matrix">Matrix Match</option>
-              <option value="assertion_reason">Assertion Reason</option>
-              <option value="passage">Passage Based</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">Difficulty</label>
-            <select value={formData.difficulty} onChange={e => setFormData({...formData, difficulty: e.target.value})} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all">
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">Source Type</label>
-            <select value={formData.source_type} onChange={e => setFormData({...formData, source_type: e.target.value})} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all">
-              <option value="non_pyq">Non-PYQ</option>
-              <option value="pyq">PYQ</option>
-            </select>
-          </div>
+      {/* Recovered draft */}
+      {recoverable && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-[#8692f7]/25 bg-[#8692f7]/[0.07] px-4 py-3">
+          <RotateCcw size={16} className="text-[#8692f7]" />
+          <span className="flex-1 text-sm text-zinc-300">
+            You have an unsaved question from a previous session.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setDraft(recoverable);
+              setRecoverable(null);
+            }}
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-hover"
+          >
+            Restore it
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              window.localStorage.removeItem(DRAFT_KEY);
+              setRecoverable(null);
+            }}
+            className="rounded-lg px-3 py-1.5 text-sm text-zinc-400 hover:text-white"
+          >
+            Discard
+          </button>
         </div>
+      )}
 
-        {formData.source_type === 'pyq' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-[#1a1a1c] p-6 rounded-[20px] border border-[#262626]">
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">Year</label>
-              <input type="number" value={formData.pyq_year} onChange={e => setFormData({...formData, pyq_year: e.target.value})} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">Paper</label>
-              <input type="number" value={formData.pyq_paper} onChange={e => setFormData({...formData, pyq_paper: e.target.value})} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">Shift</label>
-              <input type="number" value={formData.pyq_shift} onChange={e => setFormData({...formData, pyq_shift: e.target.value})} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" />
-            </div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
+        {/* ── Form ── */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            save('close');
+          }}
+          className="space-y-6"
+        >
+          <div className={sectionClass}>
+            <TaxonomyPicker
+              subject={draft.subject}
+              chapterId={draft.chapter_id}
+              conceptId={draft.concept_id}
+              onChange={patch}
+              chapterError={errorFor('chapter_id')}
+              conceptError={errorFor('concept_id')}
+              onError={(message) => setToast({ message, type: 'error' })}
+            />
           </div>
-        )}
 
-        <div>
-          <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm font-medium text-zinc-400">Question Body (LaTeX supported)</label>
-            <label className={`cursor-pointer flex items-center gap-2 text-sm font-medium transition-colors ${isUploadingImage ? 'text-zinc-500' : 'text-[#8692f7] hover:text-[#6a78f2]'}`}>
-              {isUploadingImage ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={16} />}
-              {isUploadingImage ? 'Uploading...' : 'Upload Image'}
-              <input 
-                type="file" 
-                accept="image/*" 
-                className="hidden" 
-                disabled={isUploadingImage}
-                onChange={async (e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    setIsUploadingImage(true);
-                    try {
-                      const fd = new FormData();
-                      fd.append('image', e.target.files[0]);
-                      const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                      const data = await res.json();
-                      if (data.error) throw new Error(data.error);
-                      setFormData({...formData, question_body: formData.question_body + `\n![image](${data.url})\n`});
-                      setToast({ message: 'Image uploaded & watermarked successfully!', type: 'success' });
-                    } catch (err: any) {
-                      setToast({ message: err.message, type: 'error' });
-                    } finally {
-                      setIsUploadingImage(false);
-                      e.target.value = '';
-                    }
-                  }
-                }} 
+          <div className={sectionClass}>
+            <label className="mb-3 block text-sm font-medium text-zinc-400">Format</label>
+            <div className="flex flex-wrap gap-2">
+              {QUESTION_FORMATS.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => changeFormat(f)}
+                  className={`rounded-lg border px-3.5 py-2 text-sm font-medium transition-all ${
+                    draft.format === f
+                      ? 'border-[#8692f7] bg-[#8692f7]/10 text-white'
+                      : 'border-[#2a2a2a] text-zinc-400 hover:border-[#3a3a3a] hover:text-white'
+                  }`}
+                >
+                  {FORMAT_LABELS[f]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-zinc-500">{FORMAT_HINTS[draft.format]}</p>
+
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-400">Difficulty</label>
+                <div className="flex gap-2">
+                  {DIFFICULTIES.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => patch({ difficulty: d })}
+                      className={`flex-1 rounded-lg border py-2 text-sm font-medium capitalize transition-all ${
+                        draft.difficulty === d
+                          ? 'border-[#8692f7] bg-[#8692f7]/10 text-white'
+                          : 'border-[#2a2a2a] text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-zinc-400">Source</label>
+                <div className="flex gap-2">
+                  {(
+                    [
+                      { value: 'non_pyq', label: 'Original' },
+                      { value: 'pyq', label: 'Past year' },
+                    ] as const
+                  ).map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      onClick={() => patch({ source_type: s.value })}
+                      className={`flex-1 rounded-lg border py-2 text-sm font-medium transition-all ${
+                        draft.source_type === s.value
+                          ? 'border-[#8692f7] bg-[#8692f7]/10 text-white'
+                          : 'border-[#2a2a2a] text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {draft.source_type === 'pyq' && (
+              <div className="mt-4 grid grid-cols-1 gap-4 rounded-xl border border-[#262626] bg-[#141416] p-4 md:grid-cols-3">
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-zinc-400">Year</label>
+                  <input
+                    type="number"
+                    value={draft.pyq_year}
+                    onChange={(e) => patch({ pyq_year: e.target.value })}
+                    placeholder="2024"
+                    className={`w-full rounded-lg border bg-[#111112] p-2 text-sm text-white focus:outline-none ${
+                      errorFor('pyq_year') ? 'border-rose-500/50' : 'border-[#333] focus:border-primary'
+                    }`}
+                  />
+                  {errorFor('pyq_year') && (
+                    <p className="mt-1 text-xs text-rose-400">{errorFor('pyq_year')}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-zinc-400">Paper</label>
+                  {/* A select, not a number box: `pyq_paper` is CHECK-constrained to
+                      these two strings, and a number here fails only at approval. */}
+                  <select
+                    value={draft.pyq_paper}
+                    onChange={(e) => patch({ pyq_paper: e.target.value })}
+                    className={`w-full rounded-lg border bg-[#111112] p-2 text-sm text-white focus:outline-none ${
+                      errorFor('pyq_paper') ? 'border-rose-500/50' : 'border-[#333] focus:border-primary'
+                    }`}
+                  >
+                    <option value="">Select…</option>
+                    {PYQ_PAPERS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  {errorFor('pyq_paper') && (
+                    <p className="mt-1 text-xs text-rose-400">{errorFor('pyq_paper')}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-zinc-400">Shift</label>
+                  <input
+                    type="text"
+                    value={draft.pyq_shift}
+                    onChange={(e) => patch({ pyq_shift: e.target.value })}
+                    placeholder="Shift 1 (morning)"
+                    className="w-full rounded-lg border border-[#333] bg-[#111112] p-2 text-sm text-white focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className={sectionClass} ref={bodyAnchorRef}>
+            <LatexField
+              label={
+                draft.format === 'passage'
+                  ? 'Passage & question (LaTeX)'
+                  : draft.format === 'assertion_reason'
+                    ? 'Assertion & Reason (LaTeX)'
+                    : 'Question (LaTeX)'
+              }
+              value={draft.question_body}
+              onChange={(question_body) => patch({ question_body })}
+              placeholder={
+                draft.format === 'assertion_reason'
+                  ? 'Assertion (A): …\n\nReason (R): …'
+                  : 'A block of mass $m$ slides down a frictionless incline of angle $\\theta$…'
+              }
+              rows={10}
+              error={errorFor('question_body')}
+              onUploadError={(message) => setToast({ message, type: 'error' })}
+            />
+          </div>
+
+          <div className={sectionClass}>
+            {usesOptions(draft.format) && (
+              <OptionsEditor
+                format={draft.format}
+                options={draft.options}
+                correctIndices={draft.correctIndices}
+                onChange={patch}
+                error={errorFor('options') || errorFor('correct_answer')}
+                warning={warningFor('correct_answer')}
+                onUploadError={(message) => setToast({ message, type: 'error' })}
               />
-            </label>
-          </div>
-          <textarea required rows={6} value={formData.question_body} onBlur={() => pushHistory(formData, options)} onChange={e => setFormData({...formData, question_body: e.target.value})} onPaste={(e) => handleImagePaste(e, (url) => setFormData({...formData, question_body: formData.question_body + `\n![image](${url})\n`}))} className="w-full p-4 bg-[#141416] border border-[#333] text-white rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Write question content here..."></textarea>
-          
-          {/* AI Evaluation Button */}
-          <div className="mt-4 flex flex-col md:flex-row gap-4 items-start md:items-center p-4 bg-[#1a1a1c] border border-[#262626] rounded-xl">
-            <button
-              type="button"
-              disabled={isEvaluating || !formData.question_body}
-              onClick={async () => {
-                setIsEvaluating(true);
-                try {
-                  const payload = {
-                    question_body: formData.question_body,
-                    options: formData.format.includes('mcq') ? options : null,
-                    subject: formData.subject
-                  };
-                  const res = await fetch('/api/evaluate-question', {
-                    method: 'POST',
-                    body: JSON.stringify(payload)
-                  });
-                  const data = await res.json();
-                  if (data.error) throw new Error(data.error);
-                  
-                  setFormData(prev => ({
-                    ...prev,
-                    author_difficulty_bucket: data.author_difficulty_bucket,
-                    author_prior_b: data.author_prior_b
-                  }));
-                  setToast({ message: 'AI evaluated question successfully!', type: 'success' });
-                } catch (err: any) {
-                  setToast({ message: err.message || 'AI evaluation failed', type: 'error' });
-                } finally {
-                  setIsEvaluating(false);
+            )}
+
+            {usesNumeric(draft.format) && (
+              <NumericAnswer
+                format={draft.format}
+                value={draft.numericAnswer}
+                onChange={(numericAnswer) => patch({ numericAnswer })}
+                error={errorFor('correct_answer')}
+              />
+            )}
+
+            {usesMatrix(draft.format) && (
+              <MatrixEditor
+                left={draft.matrixLeft}
+                right={draft.matrixRight}
+                matches={draft.matrixMatches}
+                onChange={({ left, right, matches }) =>
+                  patch({ matrixLeft: left, matrixRight: right, matrixMatches: matches })
                 }
-              }}
-              className="flex items-center gap-2 bg-[#2c2e3e] hover:bg-[#3a3c4f] disabled:bg-[#222] disabled:text-zinc-600 text-[#a5b4fc] px-4 py-2 rounded-lg font-medium transition-colors text-sm"
-            >
-              {isEvaluating ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
-              Auto-Evaluate Difficulty
-            </button>
-
-            <div className="flex gap-4 flex-1 w-full">
-              <div className="flex-1">
-                <select value={formData.author_difficulty_bucket} onChange={e => setFormData({...formData, author_difficulty_bucket: e.target.value})} className="w-full p-2 bg-[#141416] border border-[#333] text-zinc-300 rounded-lg text-sm focus:outline-none focus:border-primary">
-                  <option value="">Select Bucket...</option>
-                  <option value="easy">Easy</option>
-                  <option value="slightly_easy">Slightly Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="slightly_medium">Slightly Medium</option>
-                  <option value="slightly_hard">Slightly Hard</option>
-                  <option value="hard">Hard</option>
-                </select>
-              </div>
-              <div className="flex-1">
-                <input type="number" step="0.1" value={formData.author_prior_b} onChange={e => setFormData({...formData, author_prior_b: parseFloat(e.target.value)})} className="w-full p-2 bg-[#141416] border border-[#333] text-zinc-300 rounded-lg text-sm focus:outline-none focus:border-primary" placeholder="Prior b (e.g. 0.5)" />
-              </div>
-            </div>
+                error={errorFor('options') || errorFor('correct_answer')}
+              />
+            )}
           </div>
-        </div>
 
-        {/* FORMAT-SPECIFIC UI */}
-        {(formData.format === 'mcq_single' || formData.format === 'mcq_multi' || formData.format === 'assertion_reason') && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-medium text-zinc-400">Options</label>
-              <button type="button" onClick={() => setOptions([...options, { id: Date.now().toString(), text: '' }])} className="text-sm text-[#8692f7] font-medium hover:text-[#6a78f2] transition-colors">
-                + Add Option
+          <div className={sectionClass}>
+            <LatexField
+              label="Solution (LaTeX)"
+              value={draft.solution}
+              onChange={(solution) => patch({ solution })}
+              placeholder="Resolve the weight along the incline: $mg\sin\theta = ma$…"
+              rows={7}
+              warning={warningFor('solution')}
+              onUploadError={(message) => setToast({ message, type: 'error' })}
+            />
+          </div>
+
+          <div className={sectionClass}>
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <label className="text-sm font-medium text-zinc-400">Adaptive calibration</label>
+                <p className="mt-0.5 text-xs text-zinc-600">
+                  The starting difficulty the IRT engine uses before real student data exists.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isEvaluating || !draft.question_body.trim()}
+                onClick={autoEvaluate}
+                className="flex items-center gap-2 rounded-lg border border-[#2a2a2a] px-3 py-2 text-xs font-medium text-[#a5b4fc] transition-colors hover:border-[#8692f7]/40 disabled:text-zinc-600"
+              >
+                {isEvaluating ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Wand2 size={14} />
+                )}
+                Estimate with AI
               </button>
             </div>
-            
-            <div className="text-xs text-zinc-500 font-medium mb-1 pl-12 uppercase tracking-widest">Select Correct</div>
-            <div className="space-y-3">
-              {options.map((opt: any, i) => {
-                const isChecked = formData.format === 'mcq_single' 
-                  ? formData.correct_answer === (i + 1).toString()
-                  : formData.correct_answer.split(',').includes((i + 1).toString());
-                
-                return (
-                  <div key={opt.id} className="flex flex-col gap-2 p-3 bg-[#1a1a1c] border border-[#262626] rounded-xl">
-                    <div className="flex gap-3 items-center">
-                      <div className="w-8 flex justify-center">
-                        {formData.format === 'mcq_single' || formData.format === 'assertion_reason' ? (
-                          <input type="radio" name="correct_answer" checked={isChecked} onChange={() => setFormData({...formData, correct_answer: (i + 1).toString()})} className="w-4 h-4 text-primary bg-[#141416] border-[#333] focus:ring-primary/20" />
-                        ) : (
-                          <input type="checkbox" checked={isChecked} onChange={(e) => {
-                            let current = formData.correct_answer ? formData.correct_answer.split(',') : [];
-                            if (e.target.checked) current.push((i + 1).toString());
-                            else current = current.filter(val => val !== (i + 1).toString());
-                            setFormData({...formData, correct_answer: current.sort().join(',')});
-                          }} className="w-4 h-4 text-primary bg-[#141416] border-[#333] rounded focus:ring-primary/20" />
-                        )}
-                      </div>
-                      <span className="w-4 text-center font-bold text-zinc-500">{i + 1}</span>
-                      <input type="text" value={opt.text} onChange={e => {
-                        const newOpts = [...options];
-                        newOpts[i].text = e.target.value;
-                        setOptions(newOpts);
-                      }} onPaste={(e) => handleImagePaste(e, (url) => {
-                        const newOpts = [...options];
-                        newOpts[i].image_url = url;
-                        setOptions(newOpts);
-                      })} className="flex-1 p-2.5 bg-[#141416] border border-[#333] text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder={`Option text`} />
-                      
-                      <label className="cursor-pointer text-zinc-400 hover:text-[#8692f7] p-2 transition-colors">
-                        <ImageIcon size={18} />
-                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            const loadingToastId = Date.now().toString();
-                            setToast({ message: 'Uploading option image...', type: 'success' });
-                            try {
-                              const fd = new FormData();
-                              fd.append('image', e.target.files[0]);
-                              const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
-                              const data = await res.json();
-                              if (data.error) throw new Error(data.error);
-                              
-                              const newOpts = [...options];
-                              newOpts[i].image_url = data.url;
-                              setOptions(newOpts);
-                              setToast({ message: 'Option image added!', type: 'success' });
-                            } catch (err: any) {
-                              setToast({ message: err.message, type: 'error' });
-                            }
-                            e.target.value = '';
-                          }
-                        }} />
-                      </label>
 
-                      <button type="button" onClick={() => setOptions(options.filter((_, idx) => idx !== i))} className="text-rose-400 hover:bg-rose-400/10 p-2 rounded-lg transition-colors">✕</button>
-                    </div>
-                    {opt.image_url && (
-                      <div className="ml-16 relative w-fit">
-                        <WatermarkImage src={opt.image_url} alt="Option image" className="h-16 rounded border border-[#333] object-contain" />
-                        <button type="button" onClick={() => {
-                          const newOpts = [...options];
-                          delete newOpts[i].image_url;
-                          setOptions(newOpts);
-                        }} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✕</button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {(formData.format === 'integer' || formData.format === 'numerical') && (
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">Correct Answer</label>
-            <input required type="text" value={formData.correct_answer} onChange={e => {
-              // Optionally validate input if it's integer vs numeric
-              let val = e.target.value;
-              if (formData.format === 'integer') val = val.replace(/[^0-9-]/g, '');
-              else val = val.replace(/[^0-9.-]/g, '');
-              setFormData({...formData, correct_answer: val})
-            }} className="w-full p-2.5 bg-[#141416] border border-[#333] text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder={formData.format === 'integer' ? "e.g. 5" : "e.g. 5.25"} />
-            <p className="text-xs text-zinc-500 mt-2">
-              {formData.format === 'integer' ? "Must be a whole number (e.g. 42 or -5)." : "Can include decimals (e.g. 3.14 or -0.5)."}
-            </p>
-          </div>
-        )}
-
-        {formData.format === 'matrix' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Column 1 Builder */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <select
+                value={draft.author_difficulty_bucket}
+                onChange={(e) => {
+                  const bucket = AUTHOR_BUCKETS.find((b) => b.value === e.target.value);
+                  patch({
+                    author_difficulty_bucket: e.target.value,
+                    // Each bucket maps to a b-range; seed the midpoint so the author
+                    // only touches the number when they want to fine-tune it.
+                    ...(bucket ? { author_prior_b: bucket.b } : {}),
+                  });
+                }}
+                className="w-full rounded-lg border border-[#333] bg-[#141416] p-2.5 text-sm text-zinc-300 focus:border-primary focus:outline-none"
+              >
+                <option value="">Bucket (defaults to difficulty)</option>
+                {AUTHOR_BUCKETS.map((b) => (
+                  <option key={b.value} value={b.value}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
               <div>
-                <div className="flex justify-between items-center mb-3">
-                  <label className="block text-sm font-medium text-zinc-400">Column 1 (Left)</label>
-                  <button type="button" onClick={() => setMatrixLeft([...matrixLeft, { id: String.fromCharCode(65 + matrixLeft.length), text: '' }])} className="text-sm text-[#8692f7] hover:text-[#6a78f2]">
-                    + Add Item
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {matrixLeft.map((item, i) => (
-                    <div key={i} className="flex gap-2 items-center">
-                      <span className="w-6 text-center font-bold text-zinc-500">{item.id}</span>
-                      <input type="text" value={item.text} onChange={e => {
-                        const next = [...matrixLeft];
-                        next[i].text = e.target.value;
-                        setMatrixLeft(next);
-                      }} className="flex-1 p-2 bg-[#141416] border border-[#333] text-white rounded-lg text-sm" placeholder="Text..." />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Column 2 Builder */}
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <label className="block text-sm font-medium text-zinc-400">Column 2 (Right)</label>
-                  <button type="button" onClick={() => setMatrixRight([...matrixRight, { id: String.fromCharCode(80 + matrixRight.length), text: '' }])} className="text-sm text-[#8692f7] hover:text-[#6a78f2]">
-                    + Add Item
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {matrixRight.map((item, i) => (
-                    <div key={i} className="flex gap-2 items-center">
-                      <span className="w-6 text-center font-bold text-zinc-500">{item.id}</span>
-                      <input type="text" value={item.text} onChange={e => {
-                        const next = [...matrixRight];
-                        next[i].text = e.target.value;
-                        setMatrixRight(next);
-                      }} className="flex-1 p-2 bg-[#141416] border border-[#333] text-white rounded-lg text-sm" placeholder="Text..." />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Matrix Mapping Grid */}
-            <div className="mt-6 border border-[#262626] rounded-xl overflow-hidden bg-[#1a1a1c]">
-              <div className="bg-[#262626] p-3 border-b border-[#333] font-medium text-sm text-zinc-300">Select Correct Matches</div>
-              <div className="p-4 overflow-x-auto">
-                <table className="w-full text-center">
-                  <thead>
-                    <tr>
-                      <th className="p-2 text-zinc-500 font-medium"></th>
-                      {matrixRight.map(r => (
-                        <th key={r.id} className="p-2 text-zinc-400 font-bold">{r.id}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {matrixLeft.map(l => (
-                      <tr key={l.id} className="border-t border-[#262626]">
-                        <td className="p-2 text-zinc-400 font-bold">{l.id}</td>
-                        {matrixRight.map(r => {
-                          const isMatched = matrixMatches[l.id]?.includes(r.id);
-                          return (
-                            <td key={r.id} className="p-2">
-                              <input 
-                                type="checkbox" 
-                                checked={isMatched}
-                                onChange={(e) => {
-                                  const matches = { ...matrixMatches };
-                                  if (!matches[l.id]) matches[l.id] = [];
-                                  if (e.target.checked) matches[l.id].push(r.id);
-                                  else matches[l.id] = matches[l.id].filter(id => id !== r.id);
-                                  setMatrixMatches(matches);
-                                }}
-                                className="w-5 h-5 text-primary bg-[#141416] border-[#333] rounded focus:ring-primary/20 cursor-pointer"
-                              />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={draft.author_prior_b}
+                  onChange={(e) => patch({ author_prior_b: parseFloat(e.target.value) || 0 })}
+                  className="w-full rounded-lg border border-[#333] bg-[#141416] p-2.5 text-sm text-zinc-300 focus:border-primary focus:outline-none"
+                  placeholder="Prior b"
+                />
+                <p className="mt-1 text-xs text-zinc-600">
+                  Prior b — −3 (easiest) to 3 (hardest).
+                </p>
               </div>
             </div>
           </div>
-        )}
+        </form>
 
-        <div>
-          <label className="block text-sm font-medium text-zinc-400 mb-2">Solution</label>
-          <textarea rows={4} value={formData.solution} onBlur={() => pushHistory(formData, options)} onChange={e => setFormData({...formData, solution: e.target.value})} onPaste={(e) => handleImagePaste(e, (url) => setFormData({...formData, solution: formData.solution + `\n![image](${url})\n`}))} className="w-full p-4 bg-[#141416] border border-[#333] text-white rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all" placeholder="Write solution here..."></textarea>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <input type="checkbox" id="published" checked={formData.published} onChange={e => setFormData({...formData, published: e.target.checked})} className="w-5 h-5 bg-[#141416] border-[#333] text-primary rounded focus:ring-primary/20" />
-          <label htmlFor="published" className="text-sm font-medium text-zinc-300">Publish immediately</label>
-        </div>
-
-        <div className="pt-6 border-t border-[#262626] flex justify-between items-center">
-          <div className="flex items-center gap-4 text-xs text-zinc-500 font-medium hidden md:flex">
-             <span className="flex items-center gap-1.5"><kbd className="px-2 py-1 bg-[#222] border border-[#333] rounded-md text-zinc-300 font-mono">⌘ S</kbd> Save</span>
-             <span className="flex items-center gap-1.5"><kbd className="px-2 py-1 bg-[#222] border border-[#333] rounded-md text-zinc-300 font-mono">⌘ Z</kbd> Undo</span>
-             <span className="flex items-center gap-1.5"><kbd className="px-2 py-1 bg-[#222] border border-[#333] rounded-md text-zinc-300 font-mono">⌘ ⇧ Z</kbd> Redo</span>
+        {/* ── Preview ── */}
+        <aside className="xl:sticky xl:top-0 xl:max-h-[calc(100vh-8rem)] xl:self-start xl:overflow-y-auto">
+          <div className="rounded-[20px] border border-[#262626] bg-[#161618] p-6">
+            <div className="mb-4 flex items-center gap-2">
+              <Sparkles size={15} className="text-[#8692f7]" />
+              <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">
+                Student view
+              </h2>
+            </div>
+            <QuestionPreview draft={draft} />
           </div>
-          <div className="flex justify-end flex-1">
-            <button type="button" onClick={() => router.back()} className="px-6 py-2.5 text-zinc-400 hover:text-white mr-4 transition-colors">Cancel</button>
-            <button type="submit" disabled={!initialConceptId && !editId && chapters.length === 0} className="bg-primary hover:bg-primary-hover disabled:bg-primary/50 text-white px-8 py-2.5 rounded-xl font-bold transition-colors shadow-sm">
-              {editId ? 'Save Changes' : 'Save Question'}
+
+          {issues.length > 0 && (
+            <div className="mt-4 space-y-2 rounded-[20px] border border-[#262626] bg-[#161618] p-5">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-500">
+                Checks
+              </h3>
+              {issues.map((issue, i) => (
+                <p
+                  key={`${issue.field}-${i}`}
+                  className={`flex items-start gap-2 text-xs ${
+                    issue.severity === 'error' ? 'text-rose-400' : 'text-amber-400'
+                  }`}
+                >
+                  {issue.severity === 'error' ? (
+                    <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                  ) : (
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                  )}
+                  {issue.message}
+                </p>
+              ))}
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* Action bar — sticky inside the scrolling <main>, so a collapsed sidebar
+          cannot leave it hanging off-centre the way a fixed bar would. */}
+      <div className="sticky bottom-0 z-40 mt-6 rounded-t-2xl border border-[#262626] bg-[#111]/95 px-6 py-3 backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <label className="flex cursor-pointer items-center gap-2.5">
+              <input
+                type="checkbox"
+                checked={draft.published}
+                onChange={(e) => patch({ published: e.target.checked })}
+                className="h-4 w-4 rounded border-[#333] bg-[#141416] text-primary focus:ring-primary/20"
+              />
+              <span className="text-sm text-zinc-300">
+                Publish immediately
+                <span className="ml-1.5 text-xs text-zinc-600">
+                  {draft.published ? '— live to students on save' : '— goes to the review queue'}
+                </span>
+              </span>
+            </label>
+
+            {errors.length > 0 && (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-rose-400">
+                <AlertCircle size={13} /> {errors.length} to fix
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="hidden items-center gap-3 text-[11px] text-zinc-600 lg:flex">
+              <kbd className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 font-mono">
+                ⌘S
+              </kbd>
+              save
+              {!isEditing && (
+                <>
+                  <kbd className="rounded border border-[#333] bg-[#1a1a1a] px-1.5 py-0.5 font-mono">
+                    ⌘⏎
+                  </kbd>
+                  save &amp; next
+                </>
+              )}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => router.push('/questions')}
+              className="px-4 py-2.5 text-sm text-zinc-400 transition-colors hover:text-white"
+            >
+              Cancel
+            </button>
+
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={() => save('again')}
+                disabled={isSaving}
+                className="rounded-xl border border-[#8692f7]/40 px-5 py-2.5 text-sm font-bold text-[#8692f7] transition-colors hover:bg-[#8692f7]/10 disabled:opacity-50"
+              >
+                Save &amp; add another
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => save('close')}
+              disabled={isSaving}
+              className="flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-primary-hover disabled:opacity-50"
+            >
+              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              {isEditing ? 'Save changes' : 'Save question'}
             </button>
           </div>
         </div>
-      </form>
+      </div>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
@@ -700,7 +755,7 @@ function NewQuestionForm() {
 
 export default function NewQuestionPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-zinc-500">Loading form...</div>}>
+    <Suspense fallback={<div className="p-8 text-center text-zinc-500">Loading form…</div>}>
       <NewQuestionForm />
     </Suspense>
   );
