@@ -40,6 +40,9 @@ export async function POST(request: Request) {
   });
 
   if (authError) {
+    // The message alone reaches the client, but the modal only ever showed
+    // "failed" — log the whole thing so the cause is visible server-side.
+    console.error('createUser failed:', JSON.stringify(authError, null, 2));
     return NextResponse.json({ error: authError.message }, { status: 500 });
   }
 
