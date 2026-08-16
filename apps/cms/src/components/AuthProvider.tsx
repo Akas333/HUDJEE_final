@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 import { Toast } from '@/components/Toast';
+import { DEV_NO_AUTH, DEV_PROFILE } from '@/lib/devAuth';
 
 interface Profile {
   id: string;
@@ -39,6 +40,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
+    // With the bypass on there is no session to track, and subscribing anyway would
+    // flip `user` back to null and bounce us to the login screen.
+    if (DEV_NO_AUTH) {
+      setLoading(false);
+      return;
+    }
+
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -96,6 +104,23 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const signOut = async () => {
     await supabase.auth.signOut();
   };
+
+  // Straight through: no login screen, no role check. Every hook above has already
+  // run, so this early return is safe to take conditionally.
+  if (DEV_NO_AUTH) {
+    return (
+      <AuthContext.Provider
+        value={{ user: null, profile: DEV_PROFILE as unknown as Profile, loading: false, signOut }}
+      >
+        {/* `body` is a flex row, so this must stay out of the flow — as a plain
+            child it becomes a third flex item and steals a column from the app. */}
+        <div className="fixed bottom-3 right-3 z-50 pointer-events-none rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-[11px] font-medium text-amber-400 backdrop-blur">
+          Auth bypassed — local only
+        </div>
+        {children}
+      </AuthContext.Provider>
+    );
+  }
 
   if (loading) {
     return (

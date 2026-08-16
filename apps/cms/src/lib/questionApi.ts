@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { DEV_NO_AUTH } from './devAuth';
 import {
   DIFFICULTIES,
   PYQ_PAPERS,
@@ -15,7 +16,8 @@ export const admin = createClient(
 );
 
 export interface Author {
-  id: string;
+  /** Null under the dev bypass, where there is no real user to credit. */
+  id: string | null;
   name: string;
 }
 
@@ -32,6 +34,23 @@ export interface Author {
  * Returns null when there is no usable session; callers decide whether to proceed.
  */
 export async function resolveAuthor(request: Request): Promise<Author | null> {
+  // The UI has no session to send a token from when the bypass is on, so the
+  // 401 below would make every save fail. Credit a real staff profile if one
+  // exists; otherwise leave `created_by` unset rather than inventing an id that
+  // would violate the FK to auth.users.
+  if (DEV_NO_AUTH) {
+    const { data: staff } = await admin
+      .from('profiles')
+      .select('id, username')
+      .in('role', ['employee', 'admin', 'superadmin'])
+      .limit(1)
+      .maybeSingle();
+
+    return staff
+      ? { id: staff.id, name: staff.username || 'Local Dev' }
+      : { id: null, name: 'Local Dev' };
+  }
+
   const header = request.headers.get('authorization');
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return null;
@@ -152,6 +171,6 @@ export function pickColumns(body: any, author: Author | null) {
   // `solution` is NOT NULL in the schema, and an author may legitimately save
   // without one — the form warns rather than blocks.
   row.solution = typeof body.solution === 'string' ? body.solution : '';
-  if (author) row.created_by = author.id;
+  if (author?.id) row.created_by = author.id;
   return row;
 }
