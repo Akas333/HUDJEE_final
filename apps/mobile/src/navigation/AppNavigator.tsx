@@ -13,7 +13,7 @@ import { BG } from '../theme/ui';
 export type RootStackParamList = {
   Auth: undefined;
   MainTabs: undefined;
-  TestAnalysisStack: undefined;
+  TestAnalysisStack: { screen?: string; params?: { sessionId: string; title?: string } };
   SettingsStack: undefined;
   AdaptiveSessionScreen: { chapterId: string; chapterTitle: string; conceptId?: string };
 };

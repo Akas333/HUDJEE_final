@@ -169,15 +169,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
   },
+  // Every item is sized explicitly rather than by a share of the bar. The old
+  // `flex: 2` / `flex: 1` expanded to `flexBasis: 0`, so each slot was a fixed
+  // ratio of the width while the pill inside kept its natural size — once a
+  // label pushed the pill wider than its ratio it overflowed, and RN does not
+  // clip, so it drew on top of the next icon. "Home" fit and the longer labels
+  // did not, which is why the overlap only showed on some tabs.
+  //
+  // Nothing here may shrink: a shrinkable label collapses to zero width and the
+  // pill closes up around the icon. The active item takes its content width,
+  // the four inactive ones are fixed, and space-between spreads the remainder.
   customTabItemActive: {
-    flex: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   customTabItemInactive: {
-    flex: 1,
+    width: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -185,21 +194,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 48,
-    minWidth: 48,
   },
   tabIconContainerFocused: {
     flexDirection: 'row',
     backgroundColor: ACTIVE_SURFACE,
     borderWidth: 1,
     borderColor: ACTIVE_BORDER,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     borderRadius: 24,
     gap: 8,
   },
   tabLabelFocused: {
     fontFamily: typography.hudjee.headingMd.fontFamily,
     fontSize: 14,
-    fontWeight: '600',
     color: ACTIVE_TINT,
   }
 });

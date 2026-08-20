@@ -32,6 +32,8 @@ import QuestionView from '../../components/practice/QuestionView';
 import SolutionCard from '../../components/practice/SolutionCard';
 import { AnswerResponse, Question, SessionSummary } from '../../services/api.mock';
 import { EngineApi } from '../../services/api';
+import { SkipRecord, completeSession } from '../../services/analysisApi';
+import { useAnalysisStore } from '../../store/analysisStore';
 import { useSubjectStore } from '../../store/subjectStore';
 import { SUBJECT_COLORS, tintFor } from '../../theme/subjects';
 import { typography } from '../../theme/typography';
@@ -107,6 +109,13 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
   );
 
   const seenIdsRef = useRef<string[]>([]);
+  /**
+   * Skips, kept for the analysis. `POST /irt/session/skip` writes no row, so a
+   * skipped question leaves no trace in `answer_events` — this is the only
+   * place it is ever known, and it is handed to the analysis store on the way
+   * out. Without it the analysis would count a skipped question as never asked.
+   */
+  const skipsRef = useRef<SkipRecord[]>([]);
   const askedAtRef = useRef<number>(Date.now());
   const scrollRef = useRef<ScrollView>(null);
 
@@ -273,6 +282,12 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
     if (!question || !sessionId || phase !== 'answering') return;
 
     setPhase('submitting');
+    skipsRef.current.push({
+      questionId: question.id,
+      timeTakenMs: Date.now() - askedAtRef.current,
+      at: new Date().toISOString(),
+    });
+
     try {
       const res = await EngineApi.skipQuestion(sessionId, question.id, seenIdsRef.current);
       setStreak(0);
@@ -299,13 +314,33 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
       return;
     }
     setSessionStatus('loading');
-    try {
-      const summary = await EngineApi.endSession(sessionId);
-      setSummaryData(summary);
-      setSessionStatus('summary');
-    } catch (err) {
-      navigation.goBack();
-    }
+
+    // The engine opens the session row and never returns to it, so this is what
+    // gives the analysis a real wall-clock duration rather than the sum of the
+    // per-question timers.
+    await completeSession(sessionId, {
+      questionsAnswered: answeredCount,
+      correctCount: correctCount,
+      durationSeconds: sessionTime,
+    });
+    useAnalysisStore.getState().prime(sessionId, skipsRef.current);
+
+    setSummaryData({
+      questions_answered: answeredCount,
+      accuracy,
+      concepts_mastered: [],
+      concepts_needing_revisit: [],
+    });
+    setSessionStatus('summary');
+  };
+
+  /** Hands the finished run to the analysis stack, which derives the rest. */
+  const openAnalysis = () => {
+    if (!sessionId) return;
+    navigation.replace('TestAnalysisStack', {
+      screen: 'TestAnalysisScreen',
+      params: { sessionId, title: chapterTitle },
+    });
   };
 
   const handleBookmark = () => showToast('Saved');
@@ -676,13 +711,19 @@ export default function AdaptiveSessionScreen({ navigation, route }: any) {
               </View>
             </View>
             <GradientButton
-              label="Done"
-              onPress={() => navigation.goBack()}
+              label="See full analysis"
+              onPress={openAnalysis}
               height={50}
               radius={999}
               block
               style={styles.primaryButton}
             />
+            <PressableScale
+              onPress={() => navigation.goBack()}
+              style={[styles.secondaryButton, styles.summaryDismiss]}
+            >
+              <Text style={styles.secondaryText}>Not now</Text>
+            </PressableScale>
           </View>
         </View>
       </Modal>
@@ -879,6 +920,7 @@ const styles = StyleSheet.create({
   sheetLabel: { color: TEXT_MUTED, fontSize: 13, fontFamily: typography.semiBold, marginBottom: 12 },
 
   summaryRow: { flexDirection: 'row', gap: 10, marginVertical: 18 },
+  summaryDismiss: { alignSelf: 'center', marginTop: 12 },
   summaryBox: { flex: 1, alignItems: 'center', gap: 4, padding: 16, borderRadius: RADIUS, backgroundColor: SURFACE, borderWidth: 1, borderColor: SURFACE_BORDER },
   summaryValue: { color: TEXT, fontSize: 20, fontFamily: typography.bold },
   summaryLabel: { color: TEXT_FAINT, fontSize: 11, fontFamily: typography.regular },

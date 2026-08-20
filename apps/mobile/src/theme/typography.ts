@@ -7,6 +7,12 @@ import { activeFamily } from './fonts';
  * typeface and swapping `ACTIVE_FAMILY` there re-dresses the whole app. Nothing
  * below should ever hardcode a font name — that is the one thing that would
  * pin a screen to a face and break the swap.
+ *
+ * The active scheme is a pairing (Montserrat over Karla), so a weight key also
+ * picks a face: `regular`/`medium` are the text face, `semiBold` and above the
+ * display one. A role that crosses that line changes typeface, not just
+ * weight — which is the loudest step the scale can take, so spend it on
+ * things that genuinely lead.
  */
 
 const w = activeFamily.weights;
