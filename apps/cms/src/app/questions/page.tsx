@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Plus, Trash2, Search, Edit2, FileQuestion } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 function QuestionsContent() {
   const searchParams = useSearchParams();
@@ -31,7 +32,19 @@ function QuestionsContent() {
 
   const deleteQuestion = async (id: string) => {
     if (!confirm('Are you sure you want to delete this question?')) return;
-    await fetch(`/api/questions/${id}`, { method: 'DELETE' });
+    // The route attributes the change to the signed-in user, so it needs the token.
+    const { data } = await supabase.auth.getSession();
+    const res = await fetch(`/api/questions/${id}`, {
+      method: 'DELETE',
+      headers: data.session?.access_token
+        ? { Authorization: `Bearer ${data.session.access_token}` }
+        : {},
+    });
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}));
+      alert(payload?.error || 'Could not delete that question.');
+      return;
+    }
     fetchQuestions();
   };
 

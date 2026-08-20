@@ -1,101 +1,138 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { admin, pickColumns, resolveAuthor, validateQuestionRow } from '@/lib/questionApi';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+/** The list gives pending drafts a `pending-<version id>` id so they stay editable. */
+function pendingVersionId(id: string): string | null {
+  return id.startsWith('pending-') ? id.slice('pending-'.length) : null;
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  
-  if (id.startsWith('pending-')) {
-    const realId = id.replace('pending-', '');
-    const { data, error } = await supabase.from('content_versions').select('*').eq('id', realId).single();
+
+  const versionId = pendingVersionId(id);
+  if (versionId) {
+    const { data, error } = await admin
+      .from('content_versions')
+      .select('*')
+      .eq('id', versionId)
+      .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ...data.after_state, id });
   }
 
-  const { error, data } = await supabase.from('questions').select('*').eq('id', id).single();
-  
+  const { error, data } = await admin.from('questions').select('*').eq('id', id).single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const author = await resolveAuthor(request);
+  if (!author) {
+    return NextResponse.json({ error: 'Sign in as CMS staff to save questions.' }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await request.json();
-  
-  if (id.startsWith('pending-')) {
-    const realId = id.replace('pending-', '');
-    
-    if (body.published) {
-      // If they decided to publish immediately, delete the pending version and insert to live
-      await supabase.from('content_versions').delete().eq('id', realId);
-      const { error, data } = await supabase.from('questions').insert(body).select().single();
+
+  const problem = validateQuestionRow(body);
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+
+  const row = pickColumns(body, author);
+  const versionId = pendingVersionId(id);
+
+  // Editing something that has not been approved yet — it is still just a draft.
+  if (versionId) {
+    if (row.published) {
+      // Publishing it outright retires the pending version and writes the real row.
+      await admin.from('content_versions').delete().eq('id', versionId);
+      const { error, data } = await admin.from('questions').insert(row).select().single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json(data);
-    } else {
-      // Just update the draft
-      const { error, data } = await supabase.from('content_versions').update({ after_state: body }).eq('id', realId).select().single();
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ ...data.after_state, id });
     }
+
+    const { error, data } = await admin
+      .from('content_versions')
+      .update({ after_state: row, created_by_name: author.name })
+      .eq('id', versionId)
+      .select()
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ...data.after_state, id, is_pending_review: true });
   }
-  
-  // Fetch existing state
-  const { data: before_state, error: fetchError } = await supabase.from('questions').select('*').eq('id', id).single();
+
+  const { data: before_state, error: fetchError } = await admin
+    .from('questions')
+    .select('*')
+    .eq('id', id)
+    .single();
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
 
-  // If the user checked "Publish immediately", bypass the queue
-  if (body.published) {
-    const { error, data } = await supabase.from('questions').update(body).eq('id', id).select().single();
+  if (row.published) {
+    // An update must not reassign authorship to whoever edited it last.
+    const { created_by, ...updates } = row;
+    const { error, data } = await admin
+      .from('questions')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data);
   }
 
-  const contentVersion = {
-    content_type: 'question',
-    content_id: id,
-    change_type: 'update',
-    before_state,
-    after_state: body,
-    status: 'pending_review',
-    created_by_name: 'Admin',
-  };
+  const { created_by, ...afterState } = row;
+  const { error, data } = await admin
+    .from('content_versions')
+    .insert({
+      content_type: 'question',
+      content_id: id,
+      change_type: 'update',
+      before_state,
+      after_state: afterState,
+      status: 'pending_review',
+      created_by_name: author.name,
+    })
+    .select()
+    .single();
 
-  const { error, data } = await supabase.from('content_versions').insert(contentVersion).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  
   return NextResponse.json({ ...data, is_pending_review: true });
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const author = await resolveAuthor(request);
+  if (!author) {
+    return NextResponse.json({ error: 'Sign in as CMS staff to delete questions.' }, { status: 401 });
+  }
+
   const { id } = await params;
-  
-  if (id.startsWith('pending-')) {
-    const realId = id.replace('pending-', '');
-    const { error } = await supabase.from('content_versions').delete().eq('id', realId);
+
+  // A draft that was never approved can just go; nothing downstream has seen it.
+  const versionId = pendingVersionId(id);
+  if (versionId) {
+    const { error } = await admin.from('content_versions').delete().eq('id', versionId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ success: true });
   }
-  
-  // Fetch existing state
-  const { data: before_state, error: fetchError } = await supabase.from('questions').select('*').eq('id', id).single();
+
+  const { data: before_state, error: fetchError } = await admin
+    .from('questions')
+    .select('*')
+    .eq('id', id)
+    .single();
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
 
-  const contentVersion = {
+  // Deleting a live question is itself a reviewable change, not an immediate drop.
+  const { error } = await admin.from('content_versions').insert({
     content_type: 'question',
     content_id: id,
     change_type: 'delete',
     before_state,
     after_state: {},
     status: 'pending_review',
-    created_by_name: 'Admin',
-  };
+    created_by_name: author.name,
+  });
 
-  const { error } = await supabase.from('content_versions').insert(contentVersion).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  
   return NextResponse.json({ success: true, is_pending_review: true });
 }

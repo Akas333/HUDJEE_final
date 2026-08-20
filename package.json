@@ -8,7 +8,8 @@
     "workers/*"
   ],
   "comments": {
-    "react-native-worklets": "Hoisted to the root on purpose: Metro resolves it from apps/mobile while the reanimated Babel plugin resolves it from the root. If it is only a workspace dep, npm nests it under apps/mobile and the two disagree (or the plugin fails to resolve it at all). Keep this and the override on the same version."
+    "react-native-worklets": "Hoisted to the root on purpose: Metro resolves it from apps/mobile while the reanimated Babel plugin resolves it from the root. If it is only a workspace dep, npm nests it under apps/mobile and the two disagree (or the plugin fails to resolve it at all). Keep this and the override on the same version.",
+    "react": "Pinned so the whole workspace resolves ONE copy. Every peer range here is satisfied by ^19.0.0, but the lockfile had drifted to a nested react@19.2.4 under apps/cms alongside the hoisted 19.2.3. npm flags that `invalid` and will not repair it on install. Two React copies make Next's RSC pass fail with `Could not find the module ... in the React Client Manifest` on every page. Keep in step with apps/mobile, whose Expo SDK pins 19.2.3."
   },
   "dependencies": {
     "react-native-worklets": "0.10.3"
@@ -16,6 +17,8 @@
   "overrides": {
     "react-native-worklets": "0.10.3",
     "react-native-svg": "15.15.4",
-    "react-native-safe-area-context": "5.7.0"
+    "react-native-safe-area-context": "5.7.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   }
 }

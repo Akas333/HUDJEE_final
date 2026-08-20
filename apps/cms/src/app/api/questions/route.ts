@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { admin, pickColumns, resolveAuthor, validateQuestionRow } from '@/lib/questionApi';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -15,7 +10,10 @@ export async function GET(request: Request) {
   const search = searchParams.get('search');
   const published = searchParams.get('published');
 
-  let query = supabase.from('questions').select('*, chapters(name), topics(name)').order('created_at', { ascending: false });
+  let query = admin
+    .from('questions')
+    .select('*, chapters(name), topics(name)')
+    .order('created_at', { ascending: false });
 
   if (subject) query = query.eq('subject', subject);
   if (chapter_id) query = query.eq('chapter_id', chapter_id);
@@ -26,29 +24,30 @@ export async function GET(request: Request) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  
-  // Also fetch pending creations from content_versions so they show up in the list as drafts
+
+  // Pending creations live in `content_versions`, not `questions`, so without this
+  // they would vanish from the list between submission and approval.
   let finalData = data || [];
-  
+
   if (published !== 'true') {
-    const { data: pendingVersions } = await supabase
+    const { data: pendingVersions } = await admin
       .from('content_versions')
       .select('*')
       .eq('content_type', 'question')
       .eq('change_type', 'create')
       .eq('status', 'pending_review');
-      
+
     if (pendingVersions && pendingVersions.length > 0) {
-      // Filter pending versions manually to match the query params (since after_state is JSONB)
       const pendingQuestions = pendingVersions
-        .map(v => ({
+        .map((v) => ({
           ...v.after_state,
-          id: `pending-${v.id}`, // Temporary ID for the UI
+          id: `pending-${v.id}`, // Temporary id the UI routes edits through.
           is_pending_review: true,
           published: false,
-          created_at: v.submitted_at
+          created_at: v.submitted_at,
         }))
-        .filter(q => {
+        // after_state is JSONB, so the filters have to be re-applied by hand.
+        .filter((q) => {
           if (subject && q.subject !== subject) return false;
           if (chapter_id && q.chapter_id !== chapter_id) return false;
           if (concept_id && q.concept_id !== concept_id) return false;
@@ -56,7 +55,7 @@ export async function GET(request: Request) {
           if (search && !q.question_body?.toLowerCase().includes(search.toLowerCase())) return false;
           return true;
         });
-        
+
       finalData = [...pendingQuestions, ...finalData];
     }
   }
@@ -65,28 +64,39 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const author = await resolveAuthor(request);
+  if (!author) {
+    return NextResponse.json({ error: 'Sign in as CMS staff to save questions.' }, { status: 401 });
+  }
+
   const body = await request.json();
-  
-  // If the user selected 'Publish immediately', bypass the review queue and insert directly
-  if (body.published) {
-    const { error, data } = await supabase.from('questions').insert(body).select().single();
+
+  const problem = validateQuestionRow(body);
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+
+  const row = pickColumns(body, author);
+
+  // "Publish immediately" is the deliberate bypass of the review queue.
+  if (row.published) {
+    const { error, data } = await admin.from('questions').insert(row).select().single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json(data);
   }
-  
-  // Otherwise, format as a content version for the Review Queue
-  const contentVersion = {
-    content_type: 'question',
-    change_type: 'create',
-    after_state: body,
-    status: 'pending_review',
-    created_by_name: 'Admin', // In a real app, this would come from auth session
-  };
 
-  const { error, data } = await supabase.from('content_versions').insert(contentVersion).select().single();
-  
+  // Otherwise it becomes a reviewable change. `created_by` rides along inside
+  // after_state so the eventual insert still credits the author, not the reviewer.
+  const { error, data } = await admin
+    .from('content_versions')
+    .insert({
+      content_type: 'question',
+      change_type: 'create',
+      after_state: row,
+      status: 'pending_review',
+      created_by_name: author.name,
+    })
+    .select()
+    .single();
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  
-  // Return the data wrapped so frontend knows it's pending review
   return NextResponse.json({ ...data, is_pending_review: true });
 }
